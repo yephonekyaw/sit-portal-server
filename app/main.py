@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.utils.logging import get_logger
+from app.routers.main_router import main_router
 
 # Initialize the logger
 logger = get_logger()
@@ -29,6 +30,8 @@ def create_application() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    application.include_router(main_router, prefix=settings.API_PREFIX)
 
     return application
 
