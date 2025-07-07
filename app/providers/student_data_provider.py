@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List
+from typing import List, Dict, Set
 import uuid
 
 from app.db.models import (
@@ -10,127 +10,150 @@ from app.db.models import (
     UserType,
     EnrollmentStatus,
 )
-from app.utils.logging import get_logger
 from app.models.staff_models import ParsedStudentRecord
 from app.db.session import SessionLocal
-
-logger = get_logger()
 
 
 class StudentDataProvider:
     def __init__(self, student_data: List[ParsedStudentRecord]):
-        self.db = SessionLocal()
         self.student_data = student_data
-        self.processed_emails = set()
-        self.processed_student_ids = set()
-        self.new_users: List[User] = []
-        self.new_students: List[Student] = []
+        self.existing_emails: Set[str] = set()
+        self.existing_student_ids: Set[str] = set()
+        self.programs_cache: Dict[str, Program] = {}
 
-    def process(self) -> None:
-        self._load_existing_identifiers()
+    def process(self) -> Dict[str, int]:
+        """Process student data and create user and student records"""
+        stats = {"processed": 0, "skipped": 0, "created": 0}
+
+        with SessionLocal() as db:
+            try:
+                # Load existing data
+                self._load_existing_data(db)
+
+                # Remove duplicates from input
+                unique_students = self._remove_duplicates()
+
+                # Process each student
+                for student in unique_students:
+                    try:
+                        if self._should_skip_student(student):
+                            stats["skipped"] += 1
+                            continue
+
+                        self._create_student_record(db, student)
+                        stats["processed"] += 1
+                        stats["created"] += 1
+
+                    except Exception as e:
+                        stats["skipped"] += 1
+
+                db.commit()
+                return stats
+
+            except Exception as e:
+                db.rollback()
+                raise
+
+    def _load_existing_data(self, db) -> None:
+        """Load existing emails, student IDs, and programs"""
+        # Load existing emails and student IDs
+        existing_emails = db.query(User.email).all()
+        self.existing_emails = {email for email, in existing_emails}
+
+        existing_student_ids = db.query(Student.roll_number).all()
+        self.existing_student_ids = {sid for sid, in existing_student_ids}
+
+        # Load programs cache
+        programs = db.query(Program).filter(Program.is_active == True).all()
+        self.programs_cache = {program.program_code: program for program in programs}
+
+    def _remove_duplicates(self) -> List[ParsedStudentRecord]:
+        """Remove duplicates from input data"""
+        seen_emails = set()
+        seen_student_ids = set()
+        unique_students = []
 
         for student in self.student_data:
-            if self._is_duplicate(student):
+            if student.email in seen_emails or student.studentId in seen_student_ids:
                 continue
 
-            academic_year = self._get_or_create_academic_year(student.academicYear)
-            program = self._get_program(student.programCode)
+            seen_emails.add(student.email)
+            seen_student_ids.add(student.studentId)
+            unique_students.append(student)
 
-            if not program:
-                raise ValueError(f"{student.programCode} not found in database.")
+        return unique_students
 
-            self._create_user_and_student(student, program, academic_year)
-
-        self._commit_changes()
-
-    def _load_existing_identifiers(self) -> None:
-        existing_emails = self.db.query(User.email).all()
-        self.processed_emails.update(email for email, in existing_emails)
-
-        existing_student_ids = self.db.query(Student.roll_number).all()
-        self.processed_student_ids.update(sid for sid, in existing_student_ids)
-
-    def _is_duplicate(self, student: ParsedStudentRecord) -> bool:
-        email = student.email
-        student_id = student.studentId
-        if email in self.processed_emails or student_id in self.processed_student_ids:
-            return True
-        return False
-
-    def _get_or_create_academic_year(self, year_code: str) -> AcademicYear:
-        if not year_code:
-            raise ValueError("Academic year cannot be empty.")
-
-        academic_year = (
-            self.db.query(AcademicYear).filter_by(year_code=year_code).first()
+    def _should_skip_student(self, student: ParsedStudentRecord) -> bool:
+        """Check if student should be skipped"""
+        return (
+            student.email in self.existing_emails
+            or student.studentId in self.existing_student_ids
         )
 
-        if not academic_year:
-            try:
-                start_year = int(year_code.split("-")[0])
-                academic_year = AcademicYear(
-                    year_code=year_code,
-                    start_date=datetime(start_year, 8, 1),
-                    end_date=datetime(start_year + 1, 6, 1),
-                    is_current=True,
-                )
-                self.db.add(academic_year)
-                self.db.flush()
-            except (ValueError, IndexError):
-                raise ValueError(
-                    "Invalid academic year format. Expected format: YYYY-YYYY."
-                )
-        return academic_year
+    def _create_student_record(self, db, student: ParsedStudentRecord) -> None:
+        """Create user and student records"""
+        # Get or create academic year
+        academic_year = self._get_or_create_academic_year(db, student.academicYear)
 
-    def _get_program(self, program_code: str) -> Program:
-        program = self.db.query(Program).filter_by(program_code=program_code).first()
+        # Get program
+        program = self.programs_cache.get(student.programCode)
         if not program:
-            raise KeyError("Program code cannot be found in database.")
-        return program
+            raise ValueError(f"Program {student.programCode} not found")
 
-    def _create_user_and_student(
-        self,
-        student: ParsedStudentRecord,
-        program: Program,
-        academic_year: AcademicYear,
-    ) -> None:
+        # Create user
         user_id = uuid.uuid4()
-        new_user = User(
+        user = User(
             id=user_id,
-            first_name=student.firstName,
-            last_name=student.lastName,
-            email=student.email,
+            first_name=student.firstName.strip(),
+            last_name=student.lastName.strip(),
+            email=student.email.lower(),
             user_type=UserType.STUDENT,
         )
-        self.new_users.append(new_user)
+        db.add(user)
 
-        new_student = Student(
+        # Create student
+        student_record = Student(
             user_id=user_id,
-            sit_email=student.email,
+            sit_email=student.email.lower(),
             roll_number=student.studentId,
             program_id=program.id,
             academic_year_id=academic_year.id,
             enrollment_status=EnrollmentStatus.ACTIVE,
         )
-        self.new_students.append(new_student)
-        self.processed_emails.add(new_user.email)
-        self.processed_student_ids.add(new_student.roll_number)
+        db.add(student_record)
 
-    def _commit_changes(self) -> None:
-        if not self.new_users and not self.new_students:
-            return
+        # Update tracking sets
+        self.existing_emails.add(user.email)
+        self.existing_student_ids.add(student_record.roll_number)
 
+    def _get_or_create_academic_year(self, db, year_code: str) -> AcademicYear:
+        """Get or create academic year"""
+        if not year_code:
+            raise ValueError("Academic year cannot be empty")
+
+        # Check if exists
+        academic_year = db.query(AcademicYear).filter_by(year_code=year_code).first()
+        if academic_year:
+            return academic_year
+
+        # Create new one
         try:
-            self.db.add_all(self.new_users)
-            self.db.add_all(self.new_students)
-            self.db.commit()
-        except Exception as e:
-            self.db.rollback()
-            raise e
-        finally:
-            self.db.close()
+            start_year_str, end_year_str = year_code.split("-")
+            start_year = int(start_year_str)
+            end_year = int(end_year_str)
 
+            if end_year != start_year + 1:
+                raise ValueError("End year must be start year + 1")
 
-def handle_student_data(student_data: List[ParsedStudentRecord]) -> None:
-    handler = StudentDataProvider(student_data)
-    handler.process()
+            academic_year = AcademicYear(
+                year_code=year_code,
+                start_date=datetime(start_year, 8, 1),
+                end_date=datetime(end_year, 6, 30),
+                is_current=True,
+            )
+            db.add(academic_year)
+            db.flush()
+            return academic_year
+
+        except (ValueError, IndexError) as e:
+            raise ValueError(f"Invalid academic year format '{year_code}': {e}")

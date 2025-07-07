@@ -13,9 +13,10 @@ staff_router = APIRouter()
 async def upload_student_data(data: List[ParsedStudentRecord]):
     provider = StudentDataProvider(data)
     try:
-        provider.process()
+        stats = provider.process()
         return ResponseBuilder.success(
-            None, message="Student data processed successfully."
+            stats,
+            message=f"Student data processed successfully. Created {stats['created']} students, skipped {stats['skipped']}.",
         )
     except ValueError as e:
         raise StarletteHTTPException(status_code=400, detail=str(e))

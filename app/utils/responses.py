@@ -45,8 +45,8 @@ class ApiResponse(BaseModel):
         default=None, description="Error details"
     )
     warnings: Optional[List[str]] = Field(default=None, description="Warning messages")
-    timestamp: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc),
+    timestamp: str = Field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(),
         description="Response timestamp",
     )
     request_id: str = Field(

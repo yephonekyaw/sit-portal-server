@@ -8,6 +8,6 @@ class ParsedStudentRecord(BaseModel):
     lastName: str
     email: EmailStr
     studentId: str = Field(..., pattern="^[0-9]{11}$")
-    programCode: str
-    academicYear: str
+    programCode: str = Field(..., pattern="^(CS|DSI|IT)$")
+    academicYear: str = Field(..., pattern="^[0-9]{4}-[0-9]{4}$")
     sourceFile: Optional[str] = None
