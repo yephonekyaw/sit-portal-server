@@ -13,10 +13,11 @@ class Settings(BaseSettings):
     ALLOWED_HOSTS: Union[str, List[str]] = ""
     LOG_LEVEL: str = ""
     GEMINI_API_KEY: str = ""
-    GOOGLE_APPLICATION_CREDENTIALS : str = ""
+    GOOGLE_APPLICATION_CREDENTIALS: str = ""
     GOOGLE_CLOUD_PROJECT_ID: str = ""
     DOCUMENT_AI_PROCESSOR_ID: str = ""
     DOCUMENT_AI_LOCATION: str = ""
+    DATABASE_URL: str = ""
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

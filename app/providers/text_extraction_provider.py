@@ -4,10 +4,11 @@ import re
 from pathlib import Path
 from typing import Dict, Any, Optional
 from google.cloud import documentai_v1
+
 from app.config.settings import settings
 
 
-class TextExtractor:
+class TextExtractionProvider:
     """Extract text and verification URL from documents."""
 
     def __init__(self):

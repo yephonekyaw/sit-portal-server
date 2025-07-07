@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config.settings import settings
 from app.utils.logging import get_logger
 from app.routers.main_router import main_router
+from app.utils.errors import setup_error_handlers
 
 # Initialize the logger
 logger = get_logger()
@@ -22,6 +23,9 @@ def create_application() -> FastAPI:
         title=settings.NAME, version=settings.VERSION, lifespan=lifespan
     )
 
+    # Setup error handlers
+    setup_error_handlers(application)
+
     # Add CORS middleware
     application.add_middleware(
         CORSMiddleware,
@@ -39,10 +43,10 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
-@app.get("/")
-async def root():
-    """Root endpoint to check if the server is running."""
-    return {"message": "Welcome to Jubi Bot!"}
+@app.get("/health", tags=["Health"])
+async def health_check():
+    """Health check endpoint to verify if the server is running."""
+    return {"status": "ok", "message": "Jubi Bot is running!"}
 
 
 if __name__ == "__main__":
