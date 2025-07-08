@@ -55,11 +55,11 @@ def setup_error_handlers(app: FastAPI):
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail}")
         return ResponseBuilder.error(
+            request=request,
             message=str(exc.detail),
             error_code="HTTP_ERROR",
             status_code=exc.status_code,
             meta={"http_status": exc.status_code},
-            path=str(request.url.path),
         )
 
     """
@@ -86,11 +86,11 @@ def setup_error_handlers(app: FastAPI):
             )
 
         return ResponseBuilder.error(
+            request=request,
             message="Request validation failed",
             errors=formatted_errors,
             error_code="VALIDATION_ERROR",
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            path=str(request.url.path),
         )
 
     """
@@ -117,10 +117,10 @@ def setup_error_handlers(app: FastAPI):
             )
 
         return ResponseBuilder.error(
+            request=request,
             message="Data validation failed",
             error_code="INTERNAL_VALIDATION_ERROR",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            path=str(request.url.path),
         )
 
     @app.exception_handler(DatabaseError)
@@ -128,11 +128,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Database Error: {exc.message}")
 
         return ResponseBuilder.error(
+            request=request,
             message=exc.message,
             error_code=exc.error_code,
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             meta={"error_type": "DATABASE_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(SQLAlchemyError)
@@ -141,11 +141,11 @@ def setup_error_handlers(app: FastAPI):
 
         # Don't expose internal database errors to users
         return ResponseBuilder.error(
+            request=request,
             message="A database error occurred",
             error_code="DATABASE_ERROR",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             meta={"error_type": "SQLALCHEMY_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(BusinessLogicError)
@@ -155,11 +155,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Business Logic Error: {exc.message}")
 
         return ResponseBuilder.error(
+            request=request,
             message=exc.message,
             error_code=exc.error_code,
             status_code=status.HTTP_400_BAD_REQUEST,
             meta={"error_type": "BUSINESS_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(AuthenticationError)
@@ -169,11 +169,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Authentication Error: {exc.message}")
 
         return ResponseBuilder.error(
+            request=request,
             message=exc.message,
             error_code="UNAUTHORIZED",
             status_code=status.HTTP_401_UNAUTHORIZED,
             meta={"error_type": "AUTHENTICATION_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(AuthorizationError)
@@ -183,11 +183,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Authorization Error: {exc.message}")
 
         return ResponseBuilder.error(
+            request=request,
             message=exc.message,
             error_code="FORBIDDEN",
             status_code=status.HTTP_403_FORBIDDEN,
             meta={"error_type": "AUTHORIZATION_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(ValueError)
@@ -195,11 +195,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Value Error: {str(exc)}")
 
         return ResponseBuilder.error(
+            request=request,
             message=str(exc),
             error_code="VALUE_ERROR",
             status_code=status.HTTP_400_BAD_REQUEST,
             meta={"error_type": "VALUE_ERROR"},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(KeyError)
@@ -207,11 +207,11 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Key Error: {str(exc)}")
 
         return ResponseBuilder.error(
+            request=request,
             message=f"Required key not found: {str(exc)}",
             error_code="KEY_ERROR",
             status_code=status.HTTP_400_BAD_REQUEST,
             meta={"error_type": "KEY_ERROR", "missing_key": str(exc)},
-            path=str(request.url.path),
         )
 
     @app.exception_handler(Exception)
@@ -221,9 +221,9 @@ def setup_error_handlers(app: FastAPI):
         logger.error(f"Traceback: {traceback.format_exc()}")
 
         return ResponseBuilder.error(
+            request=request,
             message="An internal server error occurred",
             error_code="INTERNAL_ERROR",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             meta={"error_type": "INTERNAL_ERROR"},
-            path=str(request.url.path),
         )

@@ -11,6 +11,7 @@ from sqlalchemy import (
     JSON,
     Index,
     func,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -26,7 +27,6 @@ class Base(DeclarativeBase):
 class UserType(enum.Enum):
     STUDENT = "student"
     STAFF = "staff"
-    ADMIN = "admin"
 
 
 class EnrollmentStatus(enum.Enum):
@@ -39,7 +39,6 @@ class SubmissionStatus(enum.Enum):
     VERIFIED = "verified"
     REJECTED = "rejected"
     MANUAL_REVIEW = "manual_review"
-    EXPIRED = "expired"
 
 
 class VerificationType(enum.Enum):
@@ -47,16 +46,36 @@ class VerificationType(enum.Enum):
     AGENT = "agent"
 
 
-class NotificationType(enum.Enum):
-    SUBMISSION_REMINDER = "submission_reminder"
-    DEADLINE_WARNING = "deadline_warning"
-    OVERDUE_ALERT = "overdue_alert"
-    SUBMISSION_CONFIRMED = "submission_confirmed"
+class ActorType(enum.Enum):
+    USER = "user"
+    SYSTEM = "system"
+    SCHEDULED = "scheduled"
 
 
-class RelatedEntityType(enum.Enum):
-    PROGRAM_REQUIREMENT = "program_requirement"
-    SUBMISSION = "submission"
+class Priority(enum.Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    URGENT = "urgent"
+
+
+class ChannelType(enum.Enum):
+    IN_APP = "in_app"
+    MICROSOFT_TEAMS = "microsoft_teams"
+
+
+class TemplateFormat(enum.Enum):
+    TEXT = "text"
+    MARKDOWN = "markdown"
+    HTML = "html"
+    JSON = "json"
+
+
+class NotificationStatus(enum.Enum):
+    PENDING = "pending"
+    DELIVERED = "delivered"
+    READ = "read"
+    FAILED = "failed"
 
 
 # Models
@@ -80,7 +99,9 @@ class User(Base):
     # Relationships
     student: Mapped[Optional["Student"]] = relationship(back_populates="user")
     staff: Mapped[Optional["Staff"]] = relationship(back_populates="user")
-    notifications: Mapped[List["Notification"]] = relationship(back_populates="user")
+    notification_recipients: Mapped[List["NotificationRecipient"]] = relationship(
+        back_populates="recipient"
+    )
 
 
 class Student(Base):
@@ -124,12 +145,92 @@ class Staff(Base):
     )
     employee_id: Mapped[str] = mapped_column(String, unique=True)
     department: Mapped[str] = mapped_column(String)
-    permissions: Mapped[Optional[str]] = mapped_column(String)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="staff")
+    staff_permissions: Mapped[List["StaffPermission"]] = relationship(
+        back_populates="staff", foreign_keys="StaffPermission.staff_id"
+    )
+    assigned_permissions: Mapped[List["StaffPermission"]] = relationship(
+        back_populates="assigned_by_staff", foreign_keys="StaffPermission.assigned_by"
+    )
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String, unique=True)
+    description: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    permissions: Mapped[List["Permission"]] = relationship(back_populates="role")
+
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    program_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("programs.id")
+    )
+    role_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("roles.id")
+    )
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    program: Mapped["Program"] = relationship(back_populates="permissions")
+    role: Mapped["Role"] = relationship(back_populates="permissions")
+    staff_permissions: Mapped[List["StaffPermission"]] = relationship(
+        back_populates="permission"
+    )
+
+    # Constraints
+    __table_args__ = (UniqueConstraint("program_id", "role_id"),)
+
+
+class StaffPermission(Base):
+    __tablename__ = "staff_permissions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    staff_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("staff.id")
+    )
+    permission_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("permissions.id")
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    assigned_by: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("staff.id")
+    )
+    assigned_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    expires_at: Mapped[Optional[datetime]]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    staff: Mapped["Staff"] = relationship(
+        back_populates="staff_permissions", foreign_keys=[staff_id]
+    )
+    permission: Mapped["Permission"] = relationship(back_populates="staff_permissions")
+    assigned_by_staff: Mapped[Optional["Staff"]] = relationship(
+        back_populates="assigned_permissions", foreign_keys=[assigned_by]
+    )
+
+    # Constraints
+    __table_args__ = (UniqueConstraint("staff_id", "permission_id"),)
 
 
 class Program(Base):
@@ -153,6 +254,7 @@ class Program(Base):
     dashboard_stats: Mapped[List["DashboardStats"]] = relationship(
         back_populates="program"
     )
+    permissions: Mapped[List["Permission"]] = relationship(back_populates="program")
 
 
 class ProgramRequirement(Base):
@@ -215,9 +317,10 @@ class CertificateType(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    type_name: Mapped[str] = mapped_column(String)
+    code: Mapped[str] = mapped_column(String, unique=True)
+    name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
-    validation_rules: Mapped[str] = mapped_column(Text)
+    validation_template: Mapped[Optional[dict]] = mapped_column(JSON)
     has_expiration: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
@@ -290,37 +393,133 @@ class VerificationHistory(Base):
     )
 
 
+class NotificationType(Base):
+    __tablename__ = "notification_types"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    code: Mapped[str] = mapped_column(String, unique=True)
+    name: Mapped[str] = mapped_column(String)
+    description: Mapped[str] = mapped_column(String)
+    entity_type: Mapped[str] = mapped_column(String)
+    default_priority: Mapped[Priority] = mapped_column(
+        Enum(Priority), default=Priority.MEDIUM
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    channel_templates: Mapped[List["NotificationChannelTemplate"]] = relationship(
+        back_populates="notification_type"
+    )
+    notifications: Mapped[List["Notification"]] = relationship(
+        back_populates="notification_type"
+    )
+
+    # Constraints
+    __table_args__ = (UniqueConstraint("entity_type", "code"),)
+
+
+class NotificationChannelTemplate(Base):
+    __tablename__ = "notification_channel_templates"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    notification_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notification_types.id")
+    )
+    channel_type: Mapped[ChannelType] = mapped_column(Enum(ChannelType))
+    template_subject: Mapped[Optional[str]] = mapped_column(String)
+    template_body: Mapped[str] = mapped_column(String)
+    template_format: Mapped[TemplateFormat] = mapped_column(
+        Enum(TemplateFormat), default=TemplateFormat.TEXT
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    notification_type: Mapped["NotificationType"] = relationship(
+        back_populates="channel_templates"
+    )
+
+    # Constraints
+    __table_args__ = (UniqueConstraint("notification_type_id", "channel_type"),)
+
+
 class Notification(Base):
     __tablename__ = "notifications"
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    user_id: Mapped[uuid.UUID] = mapped_column(
+    type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notification_types.id")
+    )
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
+    actor_type: Mapped[ActorType] = mapped_column(Enum(ActorType))
+    actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
+    subject: Mapped[str] = mapped_column(String)
+    body: Mapped[str] = mapped_column(Text)
+    priority: Mapped[Priority] = mapped_column(Enum(Priority), default=Priority.MEDIUM)
+    notification_metadata: Mapped[Optional[dict]] = mapped_column(JSON)
+    scheduled_for: Mapped[Optional[datetime]]
+    expires_at: Mapped[Optional[datetime]]
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    notification_type: Mapped["NotificationType"] = relationship(
+        back_populates="notifications"
+    )
+    recipients: Mapped[List["NotificationRecipient"]] = relationship(
+        back_populates="notification"
+    )
+
+    # Indexes
+    __table_args__ = (
+        Index("idx_notifications_entity_type", "entity_id", "type_id"),
+        Index("idx_notifications_created_at", "created_at"),
+        Index("idx_notifications_scheduled_for", "scheduled_for"),
+        Index("idx_notifications_expires_at", "expires_at"),
+    )
+
+
+class NotificationRecipient(Base):
+    __tablename__ = "notification_recipients"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    notification_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("notifications.id")
+    )
+    recipient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
-    title: Mapped[str] = mapped_column(String)
-    message: Mapped[str] = mapped_column(Text)
-    type: Mapped[NotificationType] = mapped_column(Enum(NotificationType))
-    related_entity_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True)
-    )  # program_requirement_id or submission_id
-    related_entity_type: Mapped[Optional[RelatedEntityType]] = mapped_column(
-        Enum(RelatedEntityType)
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    microsoft_teams_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[NotificationStatus] = mapped_column(
+        Enum(NotificationStatus), default=NotificationStatus.PENDING
     )
-    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
-    sent_at: Mapped[Optional[datetime]]
+    microsoft_teams_sent_at: Mapped[Optional[datetime]]
+    delivered_at: Mapped[Optional[datetime]]
     read_at: Mapped[Optional[datetime]]
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
     # Relationships
-    user: Mapped["User"] = relationship(back_populates="notifications")
+    notification: Mapped["Notification"] = relationship(back_populates="recipients")
+    recipient: Mapped["User"] = relationship(back_populates="notification_recipients")
 
-    # Indexes
+    # Constraints and Indexes
     __table_args__ = (
-        Index("idx_notifications_user_is_read", "user_id", "is_read"),
-        Index("idx_notifications_user_created_at", "user_id", "created_at"),
+        UniqueConstraint("notification_id", "recipient_id"),
+        Index("idx_notification_recipients_status", "recipient_id", "status"),
+        Index("idx_notification_recipients_status_created", "status", "created_at"),
     )
 
 

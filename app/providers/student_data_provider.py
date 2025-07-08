@@ -21,7 +21,7 @@ class StudentDataProvider:
         self.existing_student_ids: Set[str] = set()
         self.programs_cache: Dict[str, Program] = {}
 
-    def process(self) -> Dict[str, int]:
+    def process_imported_student_data(self) -> Dict[str, int]:
         """Process student data and create user and student records"""
         stats = {"processed": 0, "skipped": 0, "created": 0}
 

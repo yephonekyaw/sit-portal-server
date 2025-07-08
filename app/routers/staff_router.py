@@ -1,21 +1,22 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from typing import List
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.models.staff_models import ParsedStudentRecord
 from app.providers.student_data_provider import StudentDataProvider
-from app.utils.responses import ResponseBuilder
+from app.utils.responses import ResponseBuilder, ApiResponse
 
 staff_router = APIRouter()
 
 
-@staff_router.post("/student-data")
-async def upload_student_data(data: List[ParsedStudentRecord]):
+@staff_router.post("/import-student-data", response_model=ApiResponse)
+async def upload_student_data(data: List[ParsedStudentRecord], request: Request):
     provider = StudentDataProvider(data)
     try:
-        stats = provider.process()
+        stats = provider.process_imported_student_data()
         return ResponseBuilder.success(
-            stats,
+            request=request,
+            data=stats,
             message=f"Student data processed successfully. Created {stats['created']} students, skipped {stats['skipped']}.",
         )
     except ValueError as e:

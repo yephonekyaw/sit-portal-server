@@ -1,10 +1,12 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.config.settings import settings
 from app.utils.logging import get_logger
 from app.routers.main_router import main_router
 from app.utils.errors import setup_error_handlers
+from app.middlewares import RequestIDMiddleware
 
 # Initialize the logger
 logger = get_logger()
@@ -35,6 +37,10 @@ def create_application() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add custom middlewares
+    application.add_middleware(RequestIDMiddleware)
+
+    # Router
     application.include_router(main_router, prefix=settings.API_PREFIX)
 
     return application

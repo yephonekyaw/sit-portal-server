@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional
 from datetime import datetime, timezone
-from fastapi import status
+from fastapi import status, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from enum import Enum
@@ -62,12 +62,12 @@ class ResponseBuilder:
 
     @staticmethod
     def success(
+        request: Request,
         data: Any = None,
         message: str = "Request successful",
         meta: Optional[Dict[str, Any]] = None,
         pagination: Optional[PaginationMeta] = None,
         status_code: int = status.HTTP_200_OK,
-        path: Optional[str] = None,
     ) -> JSONResponse:
         """Create a success response"""
         response = ApiResponse(
@@ -77,7 +77,8 @@ class ResponseBuilder:
             data=data,
             meta=meta,
             pagination=pagination,
-            path=path,
+            request_id=request.state.request_id,
+            path=str(request.url.path),
         )
         return JSONResponse(
             status_code=status_code, content=response.model_dump(exclude_none=True)
@@ -85,13 +86,13 @@ class ResponseBuilder:
 
     @staticmethod
     def error(
+        request: Request,
         message: str = "An error occurred",
         errors: Optional[List[Dict[str, Any]]] = None,
         error_code: Optional[str] = None,
         status_code: int = status.HTTP_400_BAD_REQUEST,
         data: Any = None,
         meta: Optional[Dict[str, Any]] = None,
-        path: Optional[str] = None,
     ) -> JSONResponse:
         """Create an error response"""
         response_meta = meta or {}
@@ -105,7 +106,8 @@ class ResponseBuilder:
             data=data,
             meta=response_meta if response_meta else None,
             errors=errors,
-            path=path,
+            request_id=request.state.request_id,
+            path=str(request.url.path),
         )
         return JSONResponse(
             status_code=status_code, content=response.model_dump(exclude_none=True)
@@ -113,12 +115,12 @@ class ResponseBuilder:
 
     @staticmethod
     def warning(
+        request: Request,
         data: Any = None,
         message: str = "Request completed with warnings",
         warnings: Optional[List[str]] = None,
         meta: Optional[Dict[str, Any]] = None,
         status_code: int = status.HTTP_200_OK,
-        path: Optional[str] = None,
     ) -> JSONResponse:
         """Create a warning response"""
         response = ApiResponse(
@@ -128,7 +130,8 @@ class ResponseBuilder:
             data=data,
             meta=meta,
             warnings=warnings,
-            path=path,
+            request_id=request.state.request_id,
+            path=str(request.url.path),
         )
         return JSONResponse(
             status_code=status_code, content=response.model_dump(exclude_none=True)
@@ -136,13 +139,13 @@ class ResponseBuilder:
 
     @staticmethod
     def paginated(
+        request: Request,
         data: List[Any],
         page: int,
         per_page: int,
         total: int,
         message: str = "Data retrieved successfully",
         meta: Optional[Dict[str, Any]] = None,
-        path: Optional[str] = None,
     ) -> JSONResponse:
         """Create a paginated response"""
         total_pages = (total + per_page - 1) // per_page
@@ -161,9 +164,9 @@ class ResponseBuilder:
         )
 
         return ResponseBuilder.success(
+            request=request,
             data=data,
             message=message,
             meta=meta,
             pagination=pagination,
-            path=path,
         )

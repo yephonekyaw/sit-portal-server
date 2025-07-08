@@ -84,7 +84,7 @@ class CustomizeLogger:
         # Redirect standard logging to loguru
         cls._setup_intercept_handlers()
 
-        return logger.bind(request_id=None, method=None)
+        return logger.bind(request_id="app", method=None)
 
     @staticmethod
     def _setup_intercept_handlers():
