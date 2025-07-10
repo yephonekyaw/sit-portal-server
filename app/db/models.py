@@ -35,6 +35,7 @@ class EnrollmentStatus(enum.Enum):
 
 
 class SubmissionStatus(enum.Enum):
+    SUBMITTED = "submitted"
     PENDING = "pending"
     VERIFIED = "verified"
     REJECTED = "rejected"
@@ -76,6 +77,7 @@ class NotificationStatus(enum.Enum):
     DELIVERED = "delivered"
     READ = "read"
     FAILED = "failed"
+    EXPIRED = "expired"
 
 
 # Models
@@ -456,7 +458,7 @@ class Notification(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    type_id: Mapped[uuid.UUID] = mapped_column(
+    notification_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("notification_types.id")
     )
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
@@ -481,7 +483,7 @@ class Notification(Base):
 
     # Indexes
     __table_args__ = (
-        Index("idx_notifications_entity_type", "entity_id", "type_id"),
+        Index("idx_notifications_entity_type", "entity_id", "notification_type_id"),
         Index("idx_notifications_created_at", "created_at"),
         Index("idx_notifications_scheduled_for", "scheduled_for"),
         Index("idx_notifications_expires_at", "expires_at"),
@@ -535,18 +537,30 @@ class DashboardStats(Base):
     program_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("programs.id")
     )
-    total_students: Mapped[int] = mapped_column(Integer)
-    submitted_count: Mapped[int] = mapped_column(Integer)
-    verified_count: Mapped[int] = mapped_column(Integer)
-    rejected_count: Mapped[int] = mapped_column(Integer)
-    pending_count: Mapped[int] = mapped_column(Integer)
-    manual_verification_count: Mapped[int] = mapped_column(Integer)
-    agent_verification_count: Mapped[int] = mapped_column(Integer)
+    total_students: Mapped[int] = mapped_column(Integer, default=0)
+    submitted_count: Mapped[int] = mapped_column(Integer, default=0)
+    verified_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    manual_verification_count: Mapped[int] = mapped_column(Integer, default=0)
+    agent_verification_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    last_calculated_at: Mapped[datetime]
+    last_calculated_at: Mapped[datetime] = mapped_column(
+        server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     academic_year: Mapped["AcademicYear"] = relationship(
         back_populates="dashboard_stats"
     )
     program: Mapped["Program"] = relationship(back_populates="dashboard_stats")
+
+    # Constraints and Indexes
+    __table_args__ = (
+        UniqueConstraint("academic_year_id", "program_id"),
+        Index(
+            "idx_dashboard_stats_academic_year_program",
+            "academic_year_id",
+            "program_id",
+        ),
+    )

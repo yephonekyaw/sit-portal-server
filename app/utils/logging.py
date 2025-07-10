@@ -43,7 +43,7 @@ class CustomizeLogger:
 
         return cls.customize_logging(
             log_dir=logging_config.get("log_dir"),
-            filename=f"{date.today().strftime('%Y-%m-%d')}_{logging_config.get('filename')}",
+            filename=f"{date.today().strftime('%Y-%m-%d')}-{logging_config.get('filename')}",
             level=logging_config.get("level"),
             rotation=logging_config.get("rotation"),
             retention=logging_config.get("retention"),

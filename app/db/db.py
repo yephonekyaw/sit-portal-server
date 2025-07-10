@@ -20,12 +20,13 @@ async def drop_tables():
     logger.info("Dropped all tables.")
 
 
-async def main():
+async def reset_db():
+    logger.info("Resetting database...")
+    await drop_tables()
     await create_tables()
     await seed_db()
-    # await drop_tables()
-    pass
+    logger.info("Database reset complete.")
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(reset_db())

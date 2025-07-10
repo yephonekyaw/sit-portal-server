@@ -47,7 +47,6 @@ async def seed_programs(db_session: AsyncSession):
 
     if programs_to_add:
         db_session.add_all(programs_to_add)
-        await db_session.commit()
         logger.info(f"Successfully seeded {len(programs_to_add)} programs")
     else:
         logger.info("No new programs to seed")

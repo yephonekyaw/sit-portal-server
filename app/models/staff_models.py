@@ -9,5 +9,5 @@ class ParsedStudentRecord(BaseModel):
     email: EmailStr
     studentId: str = Field(..., pattern="^[0-9]{11}$")
     programCode: str = Field(..., pattern="^(CS|DSI|IT)$")
-    academicYear: str = Field(..., pattern="^[0-9]{4}-[0-9]{4}$")
+    academicYear: str = Field(..., pattern="^[0-9]{4}$")
     sourceFile: Optional[str] = None
