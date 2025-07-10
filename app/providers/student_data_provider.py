@@ -2,6 +2,9 @@ from datetime import datetime
 from typing import List, Dict, Set
 import uuid
 
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.db.models import (
     AcademicYear,
     Program,
@@ -11,7 +14,7 @@ from app.db.models import (
     EnrollmentStatus,
 )
 from app.models.staff_models import ParsedStudentRecord
-from app.db.session import SessionLocal
+from app.db.session import AsyncSessionLocal
 
 
 class StudentDataProvider:
@@ -21,14 +24,14 @@ class StudentDataProvider:
         self.existing_student_ids: Set[str] = set()
         self.programs_cache: Dict[str, Program] = {}
 
-    def process_imported_student_data(self) -> Dict[str, int]:
+    async def process_imported_student_data(self) -> Dict[str, int]:
         """Process student data and create user and student records"""
         stats = {"processed": 0, "skipped": 0, "created": 0}
 
-        with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             try:
                 # Load existing data
-                self._load_existing_data(db)
+                await self._load_existing_data(db)
 
                 # Remove duplicates from input
                 unique_students = self._remove_duplicates()
@@ -40,31 +43,36 @@ class StudentDataProvider:
                             stats["skipped"] += 1
                             continue
 
-                        self._create_student_record(db, student)
+                        await self._create_student_record(db, student)
                         stats["processed"] += 1
                         stats["created"] += 1
 
                     except Exception as e:
                         stats["skipped"] += 1
 
-                db.commit()
+                await db.commit()
                 return stats
 
             except Exception as e:
-                db.rollback()
+                await db.rollback()
                 raise
 
-    def _load_existing_data(self, db) -> None:
+    async def _load_existing_data(self, db: AsyncSession) -> None:
         """Load existing emails, student IDs, and programs"""
-        # Load existing emails and student IDs
-        existing_emails = db.query(User.email).all()
-        self.existing_emails = {email for email, in existing_emails}
+        # Load existing emails
+        email_stmt = select(User.email)
+        email_result = await db.execute(email_stmt)
+        self.existing_emails = {email for email, in email_result.fetchall()}
 
-        existing_student_ids = db.query(Student.roll_number).all()
-        self.existing_student_ids = {sid for sid, in existing_student_ids}
+        # Load existing student IDs
+        student_id_stmt = select(Student.roll_number)
+        student_id_result = await db.execute(student_id_stmt)
+        self.existing_student_ids = {sid for sid, in student_id_result.fetchall()}
 
         # Load programs cache
-        programs = db.query(Program).filter(Program.is_active == True).all()
+        programs_stmt = select(Program).where(Program.is_active == True)
+        programs_result = await db.execute(programs_stmt)
+        programs = programs_result.scalars().all()
         self.programs_cache = {program.program_code: program for program in programs}
 
     def _remove_duplicates(self) -> List[ParsedStudentRecord]:
@@ -90,10 +98,14 @@ class StudentDataProvider:
             or student.studentId in self.existing_student_ids
         )
 
-    def _create_student_record(self, db, student: ParsedStudentRecord) -> None:
+    async def _create_student_record(
+        self, db: AsyncSession, student: ParsedStudentRecord
+    ) -> None:
         """Create user and student records"""
         # Get or create academic year
-        academic_year = self._get_or_create_academic_year(db, student.academicYear)
+        academic_year = await self._get_or_create_academic_year(
+            db, student.academicYear
+        )
 
         # Get program
         program = self.programs_cache.get(student.programCode)
@@ -126,13 +138,18 @@ class StudentDataProvider:
         self.existing_emails.add(user.email)
         self.existing_student_ids.add(student_record.roll_number)
 
-    def _get_or_create_academic_year(self, db, year_code: str) -> AcademicYear:
+    async def _get_or_create_academic_year(
+        self, db: AsyncSession, year_code: str
+    ) -> AcademicYear:
         """Get or create academic year"""
         if not year_code:
             raise ValueError("Academic year cannot be empty")
 
         # Check if exists
-        academic_year = db.query(AcademicYear).filter_by(year_code=year_code).first()
+        stmt = select(AcademicYear).where(AcademicYear.year_code == year_code)
+        result = await db.execute(stmt)
+        academic_year = result.scalar_one_or_none()
+
         if academic_year:
             return academic_year
 
@@ -152,7 +169,7 @@ class StudentDataProvider:
                 is_current=True,
             )
             db.add(academic_year)
-            db.flush()
+            await db.flush()
             return academic_year
 
         except (ValueError, IndexError) as e:

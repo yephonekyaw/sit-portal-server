@@ -500,7 +500,7 @@ class NotificationRecipient(Base):
     recipient_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
-    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     microsoft_teams_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[NotificationStatus] = mapped_column(
         Enum(NotificationStatus), default=NotificationStatus.PENDING

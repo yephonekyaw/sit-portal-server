@@ -1,24 +1,31 @@
+import asyncio
 from .models import Base
 from .seed.main import seed_db
-from .session import engine
+from .session import async_engine
 
 from app.utils.logging import get_logger
 
 logger = get_logger()
 
 
-def create_tables():
-    Base.metadata.create_all(bind=engine)
+async def create_tables():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
     logger.info("Created all tables.")
 
 
-def drop_tables():
-    Base.metadata.drop_all(bind=engine)
+async def drop_tables():
+    async with async_engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
     logger.info("Dropped all tables.")
 
 
-if __name__ == "__main__":
-    create_tables()
-    seed_db()
-    # drop_tables()
+async def main():
+    await create_tables()
+    await seed_db()
+    # await drop_tables()
     pass
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

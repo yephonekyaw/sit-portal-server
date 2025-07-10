@@ -3,6 +3,9 @@ import sys
 from pathlib import Path
 from loguru import logger
 import json
+from datetime import date
+
+from app.utils.context import get_request_id
 
 
 class InterceptHandler(logging.Handler):
@@ -26,7 +29,9 @@ class InterceptHandler(logging.Handler):
             frame = frame.f_back
             depth += 1
 
-        log = logger.bind(request_id="app")
+        # Get request ID from context
+        request_id = get_request_id() or "app"
+        log = logger.bind(request_id=request_id)
         log.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 
@@ -38,7 +43,7 @@ class CustomizeLogger:
 
         return cls.customize_logging(
             log_dir=logging_config.get("log_dir"),
-            filename=logging_config.get("filename"),
+            filename=f"{date.today().strftime('%Y-%m-%d')}_{logging_config.get('filename')}",
             level=logging_config.get("level"),
             rotation=logging_config.get("rotation"),
             retention=logging_config.get("retention"),
@@ -84,7 +89,7 @@ class CustomizeLogger:
         # Redirect standard logging to loguru
         cls._setup_intercept_handlers()
 
-        return logger.bind(request_id="app", method=None)
+        return logger
 
     @staticmethod
     def _setup_intercept_handlers():
@@ -107,5 +112,6 @@ custom_logger = CustomizeLogger.make_logger(config_path)
 
 
 def get_logger():
-    """Get the custom logger instance."""
-    return custom_logger
+    """Get the custom logger instance with request ID binding."""
+    request_id = get_request_id() or "app"
+    return custom_logger.bind(request_id=request_id)

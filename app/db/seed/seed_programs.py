@@ -1,5 +1,6 @@
 import uuid
-from sqlalchemy.orm import Session
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from ..models import (
     Program,
 )
@@ -8,7 +9,7 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-def seed_programs(db_session: Session):
+async def seed_programs(db_session: AsyncSession):
     programs_data = [
         {
             "id": uuid.uuid4(),
@@ -34,9 +35,9 @@ def seed_programs(db_session: Session):
     ]
 
     # Check if programs already exist to avoid duplicates
-    existing_codes = {
-        p.program_code for p in db_session.query(Program.program_code).all()
-    }
+    stmt = select(Program.program_code)
+    result = await db_session.execute(stmt)
+    existing_codes = {row[0] for row in result.fetchall()}
 
     programs_to_add = []
     for program_data in programs_data:
@@ -46,6 +47,7 @@ def seed_programs(db_session: Session):
 
     if programs_to_add:
         db_session.add_all(programs_to_add)
+        await db_session.commit()
         logger.info(f"Successfully seeded {len(programs_to_add)} programs")
     else:
         logger.info("No new programs to seed")
