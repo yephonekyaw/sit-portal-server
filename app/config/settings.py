@@ -4,20 +4,34 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
+    # Application
     ENVIRONMENT: str = "development"
-    NAME: str = ""
-    VERSION: str = ""
-    API_PREFIX: str = ""
-    WEB_SOCKET_PREFIX: str = ""
+    NAME: str = "<your-app-name>"
+    VERSION: str = "<your-app-version>"
+    API_PREFIX: str = "<your-api-prefix>"
+    WEB_SOCKET_PREFIX: str = "<your-web-sockets-prefix>"
     """Pydantic v2 doesn't support parsing List[str] from a plain comma-separated string by default anymore."""
-    ALLOWED_HOSTS: Union[str, List[str]] = ""
-    LOG_LEVEL: str = ""
-    GEMINI_API_KEY: str = ""
-    GOOGLE_APPLICATION_CREDENTIALS: str = ""
-    GOOGLE_CLOUD_PROJECT_ID: str = ""
-    DOCUMENT_AI_PROCESSOR_ID: str = ""
-    DOCUMENT_AI_LOCATION: str = ""
-    DATABASE_URL: str = ""
+    ALLOWED_HOSTS: Union[str, List[str]] = "<your-allowed-host-1,<your-allowed-host-2>>"
+    LOG_LEVEL: str = "<your-log-level>"
+
+    # Google Cloud
+    GEMINI_API_KEY: str = "<your-gemini-api-key>"
+    GEMINI_MODEL: str = "<your-gemini-model-name>"
+    GOOGLE_APPLICATION_CREDENTIALS: str = (
+        "<path-to-your-google-application-credentials-json>"
+    )
+    GOOGLE_CLOUD_PROJECT_ID: str = "<your-google-cloud-project-id>"
+    DOCUMENT_AI_PROCESSOR_ID: str = "<your-document-ai-processor-id>"
+    DOCUMENT_AI_LOCATION: str = "<your-document-ai-location>"
+
+    # Database
+    DATABASE_URL: str = "<your-database-url>"
+
+    # LangChain & LangSmith
+    LANGSMITH_TRACING: bool = True
+    LANGSMITH_ENDPOINT: str = "<your-langsith-endpoint>"
+    LANGSMITH_API_KEY: str = "<your-langsith-api-key>"
+    LANGSMITH_PROJECT: str = "<your-langsith-project>"
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

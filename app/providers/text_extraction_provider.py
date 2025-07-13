@@ -130,7 +130,7 @@ class TextExtractionProvider:
                     "text": full_text,
                     "success": len(full_text.strip()) > 0,
                     "pages": page_count,
-                    "confidence": 90 if full_text.strip() else 0,
+                    "confidence": 99 if full_text.strip() else 0,
                 }
 
             except Exception as e:

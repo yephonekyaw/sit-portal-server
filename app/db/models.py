@@ -37,7 +37,7 @@ class EnrollmentStatus(enum.Enum):
 class SubmissionStatus(enum.Enum):
     SUBMITTED = "submitted"
     PENDING = "pending"
-    VERIFIED = "verified"
+    APPROVED = "approved"
     REJECTED = "rejected"
     MANUAL_REVIEW = "manual_review"
 
@@ -322,7 +322,7 @@ class CertificateType(Base):
     code: Mapped[str] = mapped_column(String, unique=True)
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
-    validation_template: Mapped[Optional[dict]] = mapped_column(JSON)
+    verification_template: Mapped[str] = mapped_column(Text)
     has_expiration: Mapped[bool] = mapped_column(Boolean)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
@@ -353,7 +353,7 @@ class CertificateSubmission(Base):
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String)
     status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
-    ml_confidence_score: Mapped[Optional[float]] = mapped_column(Float)
+    agent_confidence_score: Mapped[Optional[float]] = mapped_column(Float)
     submitted_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
     expired_at: Mapped[Optional[datetime]]
@@ -383,8 +383,10 @@ class VerificationHistory(Base):
     verification_type: Mapped[VerificationType] = mapped_column(Enum(VerificationType))
     old_status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
     new_status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
-    reasons: Mapped[Optional[str]] = mapped_column(Text)
     comments: Mapped[Optional[str]] = mapped_column(Text)
+    reasons: Mapped[Optional[str]] = mapped_column(
+        Text
+    )  # rejection reasons from staff or agent
     agent_analysis_result: Mapped[Optional[dict]] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())

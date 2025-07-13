@@ -1,9 +1,12 @@
 import uuid
 from sqlalchemy import select
 from typing import Dict, Tuple
+import logging
 
 from app.db.models import AcademicYear, DashboardStats, Program
 from app.db.session import AsyncSessionLocal
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardStatsProvider:
@@ -26,6 +29,9 @@ class DashboardStatsProvider:
 
     async def create_or_update_stats(self, student_counts: Dict[Tuple[str, str], int]):
         """Updates or creates dashboard stats."""
+        if not student_counts:
+            return
+
         # Ensure lookup tables are loaded
         if not self.academic_years or not self.programs:
             await self._load_lookup_tables()
@@ -41,11 +47,13 @@ class DashboardStatsProvider:
                 existing_stats[key] = stats
 
             # Process updates
+            skipped_count = 0
             for (academic_year_code, program_code), count in student_counts.items():
                 academic_year_id = self.academic_years.get(academic_year_code)
                 program_id = self.programs.get(program_code)
 
                 if not academic_year_id or not program_id:
+                    skipped_count += 1
                     continue
 
                 key = (academic_year_id, program_id)
@@ -59,6 +67,9 @@ class DashboardStatsProvider:
                     )
                     db.add(stats_row)
 
+            if skipped_count > 0:
+                logger.warning(f"Skipped {skipped_count} entries due to invalid codes")
+
     async def update_count(
         self,
         academic_year_id: uuid.UUID,
@@ -67,13 +78,13 @@ class DashboardStatsProvider:
         value: int,
     ):
         """Updates a specific count field in the DashboardStats table."""
-        # Validate field name
-        if not hasattr(DashboardStats, field) or field in {
-            "id",
-            "academic_year_id",
-            "program_id",
-        }:
-            raise ValueError(f"Invalid field name: {field}")
+        # Validate field name more robustly
+        if not hasattr(DashboardStats, field):
+            raise ValueError(f"Field '{field}' does not exist on DashboardStats")
+
+        protected_fields = {"id", "academic_year_id", "program_id"}
+        if field in protected_fields:
+            raise ValueError(f"Cannot update protected field: {field}")
 
         async with AsyncSessionLocal.begin() as db:
             # Use get_or_create pattern
@@ -94,3 +105,18 @@ class DashboardStatsProvider:
                     **{field: value},
                 )
                 db.add(stats_row)
+
+    async def get_stats(self, academic_year_id: uuid.UUID, program_id: uuid.UUID):
+        """Retrieves dashboard stats with optional filtering."""
+        async with AsyncSessionLocal.begin() as db:
+            stmt = select(DashboardStats).where(
+                DashboardStats.academic_year_id == academic_year_id,
+                DashboardStats.program_id == program_id,
+            )
+            result = await db.execute(stmt)
+            return result.scalars().all()
+
+    def clear_cache(self):
+        """Clears the cached lookup tables."""
+        self.academic_years.clear()
+        self.programs.clear()
