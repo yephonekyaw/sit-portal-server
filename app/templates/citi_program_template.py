@@ -103,4 +103,4 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
 - Look for the exact phrase "This is to certify that:" followed by the student name
 
 **VALIDATION TASK:**
-Analyze both certificates according to the above criteria and provide your validation decision with detailed reasoning. Focus on the decision criteria and be explicit about which conditions led to your APPROVE/MANUAL REVIEW/REJECT decision."""
+Analyze both certificates according to the above criteria and provide your validation decision with detailed reasoning. Focus on the decision criteria and be explicit about which conditions led to your **APPROVE**/**MANUAL REVIEW**/**REJECT** decision."""

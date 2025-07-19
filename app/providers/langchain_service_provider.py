@@ -18,7 +18,6 @@ class LangChainServiceProvider:
 
     @lru_cache(maxsize=1)
     def get_gemini_chat_model(self) -> ChatGoogleGenerativeAI:
-        print(self.google_api_key)
         """Returns a cached instance of the Google Gemini chat model."""
         return ChatGoogleGenerativeAI(
             model=self.gemini_model,

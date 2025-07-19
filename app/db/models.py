@@ -80,6 +80,11 @@ class NotificationStatus(enum.Enum):
     EXPIRED = "expired"
 
 
+class ProgReqRecurrenceType(enum.Enum):
+    ONCE = "once"
+    ANNUAL = "annual"
+
+
 # Models
 class User(Base):
     __tablename__ = "users"
@@ -244,7 +249,8 @@ class Program(Base):
     program_code: Mapped[str] = mapped_column(String, unique=True)
     program_name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean)
+    duration_years: Mapped[int] = mapped_column(Integer, default=4)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
@@ -260,6 +266,7 @@ class Program(Base):
 
 
 class ProgramRequirement(Base):
+
     __tablename__ = "program_requirements"
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -271,12 +278,17 @@ class ProgramRequirement(Base):
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("certificate_types.id")
     )
-    academic_year_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id")
-    )
-    is_mandatory: Mapped[bool] = mapped_column(Boolean)
-    submission_deadline: Mapped[datetime]
+    target_year: Mapped[int] = mapped_column(Integer)
+    deadline_month: Mapped[int] = mapped_column(Integer)
+    deadline_day: Mapped[int] = mapped_column(Integer)
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True)
     special_instruction: Mapped[Optional[str]] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    recurrence_type: Mapped[ProgReqRecurrenceType] = mapped_column(
+        Enum(ProgReqRecurrenceType),
+        default=ProgReqRecurrenceType.ANNUAL,
+    )
+    last_recurred_at: Mapped[datetime] = mapped_column(server_default=func.now())
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
@@ -285,8 +297,58 @@ class ProgramRequirement(Base):
     certificate_type: Mapped["CertificateType"] = relationship(
         back_populates="program_requirements"
     )
+    requirement_schedules: Mapped[List["ProgramRequirementSchedule"]] = relationship(
+        back_populates="program_requirement"
+    )
+
+    # Constraints
+    __table_args__ = (
+        UniqueConstraint("program_id", "cert_type_id", "target_year"),
+        Index("idx_program_requirements_program_active", "program_id", "is_active"),
+    )
+
+
+class ProgramRequirementSchedule(Base):
+    """
+    Academic year-specific deadlines for program requirements
+    This table gets populated by scheduled jobs for each new academic year
+    """
+
+    __tablename__ = "program_requirement_schedules"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    program_requirement_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("program_requirements.id")
+    )
+    academic_year_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("academic_years.id")
+    )
+    submission_deadline: Mapped[datetime] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+
+    # Relationships
+    program_requirement: Mapped["ProgramRequirement"] = relationship(
+        back_populates="requirement_schedules"
+    )
     academic_year: Mapped["AcademicYear"] = relationship(
-        back_populates="program_requirements"
+        back_populates="requirement_schedules"
+    )
+    certificate_submissions: Mapped[List["CertificateSubmission"]] = relationship(
+        back_populates="requirement_schedule"
+    )
+    dashboard_stats: Mapped[List["DashboardStats"]] = relationship(
+        back_populates="requirement_schedule"
+    )
+
+    # Constraints
+    __table_args__ = (
+        # One schedule per requirement per academic year
+        UniqueConstraint("program_requirement_id", "academic_year_id"),
+        Index("idx_requirement_schedules_academic_year", "academic_year_id"),
+        Index("idx_requirement_schedules_deadline", "submission_deadline"),
     )
 
 
@@ -296,16 +358,16 @@ class AcademicYear(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    year_code: Mapped[str] = mapped_column(String, unique=True)
+    year_code: Mapped[str] = mapped_column(String, unique=True)  # e.g., "2023", "2024"
     start_date: Mapped[datetime]
     end_date: Mapped[datetime]
-    is_current: Mapped[bool] = mapped_column(Boolean)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
     # Relationships
     students: Mapped[List["Student"]] = relationship(back_populates="academic_year")
-    program_requirements: Mapped[List["ProgramRequirement"]] = relationship(
+    requirement_schedules: Mapped[List["ProgramRequirementSchedule"]] = relationship(
         back_populates="academic_year"
     )
     dashboard_stats: Mapped[List["DashboardStats"]] = relationship(
@@ -323,7 +385,8 @@ class CertificateType(Base):
     name: Mapped[str] = mapped_column(String)
     description: Mapped[str] = mapped_column(Text)
     verification_template: Mapped[str] = mapped_column(Text)
-    has_expiration: Mapped[bool] = mapped_column(Boolean)
+    has_expiration: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
@@ -332,6 +395,9 @@ class CertificateType(Base):
         back_populates="certificate_type"
     )
     certificate_submissions: Mapped[List["CertificateSubmission"]] = relationship(
+        back_populates="certificate_type"
+    )
+    dashboard_stats: Mapped[List["DashboardStats"]] = relationship(
         back_populates="certificate_type"
     )
 
@@ -348,6 +414,10 @@ class CertificateSubmission(Base):
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("certificate_types.id")
     )
+    requirement_schedule_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("program_requirement_schedules.id")
+    )
+
     file_name: Mapped[str] = mapped_column(String)
     file_key: Mapped[str] = mapped_column(String)
     file_size: Mapped[int] = mapped_column(Integer)
@@ -361,6 +431,9 @@ class CertificateSubmission(Base):
     # Relationships
     student: Mapped["Student"] = relationship(back_populates="certificate_submissions")
     certificate_type: Mapped["CertificateType"] = relationship(
+        back_populates="certificate_submissions"
+    )
+    requirement_schedule: Mapped[Optional["ProgramRequirementSchedule"]] = relationship(
         back_populates="certificate_submissions"
     )
     verification_history: Mapped[List["VerificationHistory"]] = relationship(
@@ -533,17 +606,28 @@ class DashboardStats(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    academic_year_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id")
+    requirement_schedule_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("program_requirement_schedules.id")
     )
     program_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("programs.id")
     )
-    total_students: Mapped[int] = mapped_column(Integer, default=0)
+    academic_year_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("academic_years.id")
+    )
+    cert_type_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("certificate_types.id")
+    )
+    total_students_required: Mapped[int] = mapped_column(Integer, default=0)
     submitted_count: Mapped[int] = mapped_column(Integer, default=0)
-    verified_count: Mapped[int] = mapped_column(Integer, default=0)
+    approved_count: Mapped[int] = mapped_column(Integer, default=0)
     rejected_count: Mapped[int] = mapped_column(Integer, default=0)
     pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    manual_review_count: Mapped[int] = mapped_column(Integer, default=0)
+    not_submitted_count: Mapped[int] = mapped_column(Integer, default=0)
+    on_time_submissions: Mapped[int] = mapped_column(Integer, default=0)
+    late_submissions: Mapped[int] = mapped_column(Integer, default=0)
+    overdue_count: Mapped[int] = mapped_column(Integer, default=0)
     manual_verification_count: Mapped[int] = mapped_column(Integer, default=0)
     agent_verification_count: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
@@ -552,17 +636,54 @@ class DashboardStats(Base):
     )
 
     # Relationships
+    requirement_schedule: Mapped["ProgramRequirementSchedule"] = relationship(
+        back_populates="dashboard_stats"
+    )
     academic_year: Mapped["AcademicYear"] = relationship(
         back_populates="dashboard_stats"
     )
     program: Mapped["Program"] = relationship(back_populates="dashboard_stats")
+    certificate_type: Mapped["CertificateType"] = relationship(
+        back_populates="dashboard_stats"
+    )
 
     # Constraints and Indexes
     __table_args__ = (
-        UniqueConstraint("academic_year_id", "program_id"),
+        UniqueConstraint("requirement_schedule_id"),
+        Index("idx_dashboard_stats_requirement_schedule", "requirement_schedule_id"),
+        Index("idx_dashboard_stats_program_id", "program_id"),
+        Index("idx_dashboard_stats_academic_year_id", "academic_year_id"),
+        Index("idx_dashboard_stats_cert_type_id", "cert_type_id"),
+        Index("idx_dashboard_stats_created_at", "created_at"),
+        Index("idx_dashboard_stats_last_calculated_at", "last_calculated_at"),
         Index(
-            "idx_dashboard_stats_academic_year_program",
-            "academic_year_id",
+            "idx_dashboard_stats_program_academic_year",
             "program_id",
+            "academic_year_id",
+        ),
+        Index("idx_dashboard_stats_program_cert_type", "program_id", "cert_type_id"),
+        Index(
+            "idx_dashboard_stats_academic_year_cert_type",
+            "academic_year_id",
+            "cert_type_id",
+        ),
+        Index(
+            "idx_dashboard_stats_program_year_cert",
+            "program_id",
+            "academic_year_id",
+            "cert_type_id",
+        ),
+        Index("idx_dashboard_stats_overdue_count", "overdue_count"),
+        Index("idx_dashboard_stats_pending_count", "pending_count"),
+        Index("idx_dashboard_stats_manual_review_count", "manual_review_count"),
+        Index(
+            "idx_dashboard_stats_summary_covering",
+            "program_id",
+            "academic_year_id",
+            "cert_type_id",
+            "total_students_required",
+            "submitted_count",
+            "approved_count",
+            "last_calculated_at",
         ),
     )
