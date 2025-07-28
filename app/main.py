@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.utils.logging import get_logger
-from app.routers.main_router import main_router
+from app.routers.main import main_router
 from app.utils.errors import setup_error_handlers
 from app.middlewares import RequestIDMiddleware
 

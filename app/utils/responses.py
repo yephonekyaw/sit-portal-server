@@ -1,7 +1,7 @@
 from typing import Any, Dict, List, Optional
 from fastapi import status, Request
 from fastapi.responses import JSONResponse
-from app.models.util_models import ApiResponse, PaginationMeta, ResponseStatus
+from app.schemas.response_schemas import ApiResponse, PaginationMeta, ResponseStatus
 
 
 class ResponseBuilder:

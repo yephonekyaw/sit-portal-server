@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     LANGSMITH_API_KEY: str = "<your-langsith-api-key>"
     LANGSMITH_PROJECT: str = "<your-langsith-project>"
 
+    # Authentication & Security
+    JWT_SECRET_KEY: str = "<your-jwt-secret-key>"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if not v:

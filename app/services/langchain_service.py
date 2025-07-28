@@ -6,7 +6,9 @@ from typing import List
 from app.config.settings import settings
 
 
-class LangChainServiceProvider:
+class LangChainService:
+    """Service for LangChain operations with Google Gemini integration"""
+    
     def __init__(self):
         self.google_api_key = settings.GEMINI_API_KEY
         self.gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
@@ -30,5 +32,5 @@ class LangChainServiceProvider:
         input_variables: List[str],
         template: str,
     ) -> PromptTemplate:
-        """Returns a custom prompt template with the provided kwargs."""
+        """Returns a custom prompt template with the provided variables."""
         return PromptTemplate(input_variables=input_variables, template=template)

@@ -2,8 +2,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
 from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import AsyncSessionLocal
 from app.db.models import (
     ChannelType,
     Notification,
@@ -17,38 +17,40 @@ from app.db.models import (
 )
 
 
-class NotificationServiceProvider:
+class NotificationService:
+    """Service for managing notifications and recipients"""
+
+    def __init__(self, db_session: AsyncSession):
+        self.db = db_session
 
     async def _get_notification_type_by_code(self, code: str) -> NotificationType:
         """Get notification type by code or raise ValueError if not found."""
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(NotificationType).where(NotificationType.code == code)
-            )
-            notification_type = result.scalar_one_or_none()
-            if not notification_type:
-                raise ValueError(f"Notification type '{code}' not found.")
-            return notification_type
+        result = await self.db.execute(
+            select(NotificationType).where(NotificationType.code == code)
+        )
+        notification_type = result.scalar_one_or_none()
+        if not notification_type:
+            raise ValueError(f"Notification type '{code}' not found.")
+        return notification_type
 
     async def _get_recipient_by_ids(
         self, notification_id: uuid.UUID, user_id: uuid.UUID
     ) -> Optional[NotificationRecipient]:
         """Get notification recipient by notification and user IDs."""
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(NotificationRecipient).where(
-                    NotificationRecipient.notification_id == notification_id,
-                    NotificationRecipient.recipient_id == user_id,
-                )
+        result = await self.db.execute(
+            select(NotificationRecipient).where(
+                NotificationRecipient.notification_id == notification_id,
+                NotificationRecipient.recipient_id == user_id,
             )
-            return result.scalar_one_or_none()
+        )
+        return result.scalar_one_or_none()
 
     async def _create_notification_recipients(
-        self, db, notification_id: uuid.UUID, recipient_ids: List[uuid.UUID]
+        self, notification_id: uuid.UUID, recipient_ids: List[uuid.UUID]
     ) -> None:
         """Create notification recipients for given user IDs."""
         # Get all valid users in one query
-        users_result = await db.execute(select(User).where(User.id.in_(recipient_ids)))
+        users_result = await self.db.execute(select(User).where(User.id.in_(recipient_ids)))
         users = {user.id: user for user in users_result.scalars().all()}
 
         # Create recipients
@@ -66,7 +68,7 @@ class NotificationServiceProvider:
                     )
                 )
 
-        db.add_all(recipients)
+        self.db.add_all(recipients)
 
     async def create_notification(
         self,
@@ -88,7 +90,7 @@ class NotificationServiceProvider:
         )
 
         notification = Notification(
-            type_id=notification_type.id,
+            notification_type_id=notification_type.id,
             entity_id=entity_id,
             actor_type=actor_type,
             actor_id=actor_id,
@@ -100,14 +102,11 @@ class NotificationServiceProvider:
             expires_at=expires_at,
         )
 
-        async with AsyncSessionLocal() as db:
-            db.add(notification)
-            await db.flush()  # Get notification ID
+        self.db.add(notification)
+        await self.db.flush()  # Get notification ID
 
-            await self._create_notification_recipients(
-                db, notification.id, recipient_ids
-            )
-            await db.commit()
+        await self._create_notification_recipients(notification.id, recipient_ids)
+        await self.db.commit()
 
         return notification
 
@@ -115,19 +114,18 @@ class NotificationServiceProvider:
         self, notification_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
         """Mark a notification as read for a specific user."""
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(NotificationRecipient)
-                .where(
-                    NotificationRecipient.notification_id == notification_id,
-                    NotificationRecipient.recipient_id == user_id,
-                )
-                .values(
-                    status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
-                )
+        result = await self.db.execute(
+            update(NotificationRecipient)
+            .where(
+                NotificationRecipient.notification_id == notification_id,
+                NotificationRecipient.recipient_id == user_id,
             )
-            await db.commit()
-            return result.rowcount > 0
+            .values(
+                status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
+            )
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
     async def mark_notification_as_delivered(
         self,
@@ -144,46 +142,43 @@ class NotificationServiceProvider:
         if channel_type == ChannelType.MICROSOFT_TEAMS:
             update_values["microsoft_teams_sent_at"] = datetime.now(timezone.utc)
 
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(NotificationRecipient)
-                .where(
-                    NotificationRecipient.notification_id == notification_id,
-                    NotificationRecipient.recipient_id == user_id,
-                )
-                .values(**update_values)
+        result = await self.db.execute(
+            update(NotificationRecipient)
+            .where(
+                NotificationRecipient.notification_id == notification_id,
+                NotificationRecipient.recipient_id == user_id,
             )
-            await db.commit()
-            return result.rowcount > 0
+            .values(**update_values)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
     async def mark_notification_as_failed(
         self, notification_id: uuid.UUID, user_id: uuid.UUID
     ) -> bool:
         """Mark a notification as failed for a specific user."""
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(NotificationRecipient)
-                .where(
-                    NotificationRecipient.notification_id == notification_id,
-                    NotificationRecipient.recipient_id == user_id,
-                )
-                .values(status=NotificationStatus.FAILED)
+        result = await self.db.execute(
+            update(NotificationRecipient)
+            .where(
+                NotificationRecipient.notification_id == notification_id,
+                NotificationRecipient.recipient_id == user_id,
             )
-            await db.commit()
-            return result.rowcount > 0
+            .values(status=NotificationStatus.FAILED)
+        )
+        await self.db.commit()
+        return result.rowcount > 0
 
     async def mark_all_notifications_as_read(self, user_id: uuid.UUID) -> int:
         """Mark all unread notifications as read for a user."""
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                update(NotificationRecipient)
-                .where(
-                    NotificationRecipient.recipient_id == user_id,
-                    NotificationRecipient.status == NotificationStatus.DELIVERED,
-                )
-                .values(
-                    status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
-                )
+        result = await self.db.execute(
+            update(NotificationRecipient)
+            .where(
+                NotificationRecipient.recipient_id == user_id,
+                NotificationRecipient.status == NotificationStatus.DELIVERED,
             )
-            await db.commit()
-            return result.rowcount
+            .values(
+                status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
+            )
+        )
+        await self.db.commit()
+        return result.rowcount

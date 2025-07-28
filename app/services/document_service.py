@@ -8,8 +8,8 @@ from google.cloud import documentai_v1
 from app.config.settings import settings
 
 
-class TextExtractionProvider:
-    """Extract text and verification URL from documents."""
+class DocumentService:
+    """Service for extracting text and verification URLs from documents"""
 
     def __init__(self):
         self.supported_image_extensions = {

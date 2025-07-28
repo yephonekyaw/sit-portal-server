@@ -62,6 +62,7 @@ class Priority(enum.Enum):
 class ChannelType(enum.Enum):
     IN_APP = "in_app"
     MICROSOFT_TEAMS = "microsoft_teams"
+    LINE_APP = "line_app"
 
 
 class TemplateFormat(enum.Enum):
@@ -91,13 +92,14 @@ class User(Base):
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
-    email: Mapped[str] = mapped_column(String, unique=True)
-    first_name: Mapped[str] = mapped_column(String)
-    last_name: Mapped[str] = mapped_column(String)
+    email: Mapped[str] = mapped_column(String(255), unique=True)
+    password_hash: Mapped[str] = mapped_column(String(255))
+    first_name: Mapped[str] = mapped_column(String(100))
+    last_name: Mapped[str] = mapped_column(String(100))
     user_type: Mapped[UserType] = mapped_column(Enum(UserType))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    refresh_tk: Mapped[Optional[str]] = mapped_column(String)
-    access_tk_ver: Mapped[int] = mapped_column(Integer, default=0)
+    refresh_token: Mapped[Optional[str]] = mapped_column(String(500))
+    access_token_version: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
     last_login: Mapped[Optional[datetime]]
@@ -119,14 +121,15 @@ class Student(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id")
     )
-    sit_email: Mapped[str] = mapped_column(String, unique=True)
-    roll_number: Mapped[str] = mapped_column(String, unique=True)
+    sit_email: Mapped[str] = mapped_column(String(255), unique=True)
+    roll_number: Mapped[str] = mapped_column(String(20), unique=True)
     program_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("programs.id")
     )
     academic_year_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("academic_years.id")
     )
+    line_application_id: Mapped[Optional[str]] = mapped_column(String(100), unique=True)
     enrollment_status: Mapped[EnrollmentStatus] = mapped_column(Enum(EnrollmentStatus))
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
@@ -683,7 +686,7 @@ class DashboardStats(Base):
             "program_id",
             "academic_year_id",
             "cert_type_id",
-            "total_students_required",
+            "total_submissions_required",
             "submitted_count",
             "approved_count",
             "last_calculated_at",

@@ -49,3 +49,6 @@ typing-inspection==0.4.1
 typing_extensions==4.14.1
 urllib3==2.5.0
 zstandard==0.23.0
+PyJWT==2.10.1
+passlib[bcrypt]==1.7.4
+python-multipart==0.0.20
