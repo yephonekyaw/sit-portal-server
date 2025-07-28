@@ -35,7 +35,6 @@ class EnrollmentStatus(enum.Enum):
 
 
 class SubmissionStatus(enum.Enum):
-    SUBMITTED = "submitted"
     PENDING = "pending"
     APPROVED = "approved"
     REJECTED = "rejected"
@@ -278,6 +277,7 @@ class ProgramRequirement(Base):
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("certificate_types.id")
     )
+    name: Mapped[str] = mapped_column(String)
     target_year: Mapped[int] = mapped_column(Integer)
     deadline_month: Mapped[int] = mapped_column(Integer)
     deadline_day: Mapped[int] = mapped_column(Integer)
@@ -422,7 +422,9 @@ class CertificateSubmission(Base):
     file_key: Mapped[str] = mapped_column(String)
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String)
-    status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
+    status: Mapped[SubmissionStatus] = mapped_column(
+        Enum(SubmissionStatus), default=SubmissionStatus.PENDING
+    )
     agent_confidence_score: Mapped[Optional[float]] = mapped_column(Float)
     submitted_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
@@ -618,7 +620,7 @@ class DashboardStats(Base):
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("certificate_types.id")
     )
-    total_students_required: Mapped[int] = mapped_column(Integer, default=0)
+    total_submissions_required: Mapped[int] = mapped_column(Integer, default=0)
     submitted_count: Mapped[int] = mapped_column(Integer, default=0)
     approved_count: Mapped[int] = mapped_column(Integer, default=0)
     rejected_count: Mapped[int] = mapped_column(Integer, default=0)

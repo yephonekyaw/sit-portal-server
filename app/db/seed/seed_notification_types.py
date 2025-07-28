@@ -54,21 +54,21 @@ async def seed_notification_types(db_session: AsyncSession):
         },
         # ProgramRequirement actions
         {
-            "entity_type": "ProgramRequirement",
+            "entity_type": "ProgramRequirementSchedule",
             "code": "program_requirement_overdue",
             "name": "Requirement Overdue",
             "description": "A program requirement is overdue.",
             "default_priority": Priority.HIGH,
         },
         {
-            "entity_type": "ProgramRequirement",
+            "entity_type": "ProgramRequirementSchedule",
             "code": "program_requirement_warn",
             "name": "Requirement Warning",
             "description": "A warning for an upcoming program requirement deadline.",
             "default_priority": Priority.MEDIUM,
         },
         {
-            "entity_type": "ProgramRequirement",
+            "entity_type": "ProgramRequirementSchedule",
             "code": "program_requirement_remind",
             "name": "Requirement Reminder",
             "description": "A reminder for a program requirement.",
