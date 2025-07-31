@@ -15,7 +15,7 @@ class CertificateSubmissionResponse(BaseModel):
     cert_type_id: UUID = Field(..., description="Certificate type ID")
     requirement_schedule_id: UUID = Field(..., description="Requirement schedule ID")
     file_object_name: str = Field(..., description="File object name in MinIO")
-    file_name: str = Field(..., description="Original file name")
+    filename: str = Field(..., description="Original file name")
     file_size: int = Field(..., description="File size in bytes")
     mime_type: str = Field(..., description="File MIME type")
     submission_status: SubmissionStatus = Field(
@@ -39,7 +39,7 @@ class CertificateSubmissionCreate(BaseModel):
     cert_type_id: UUID
     requirement_schedule_id: UUID
     file_object_name: str
-    file_name: str
+    filename: str
     file_size: int
     mime_type: str
     agent_confidence_score: float = 0.0

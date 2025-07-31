@@ -428,7 +428,7 @@ class CertificateSubmission(Base):
     )
 
     file_object_name: Mapped[str] = mapped_column(String)
-    file_name: Mapped[str] = mapped_column(String)
+    filename: Mapped[str] = mapped_column(String)
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String)
     submission_status: Mapped[SubmissionStatus] = mapped_column(

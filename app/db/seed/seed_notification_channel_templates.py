@@ -27,7 +27,7 @@ async def seed_notification_channel_templates(db_session: AsyncSession):
             "notification_type_code": "certificate_submission_update",
             "channel_type": ChannelType.IN_APP,
             "template_subject": "Certificate Submission Updated: {certificate_name}",
-            "template_body": "**{student_name}** `{student_roll_number}` updated `{certificate_name}` submission for {program_name}. File: {file_name}",
+            "template_body": "**{student_name}** `{student_roll_number}` updated `{certificate_name}` submission for {program_name}. File: {filename}",
             "template_format": TemplateFormat.MARKDOWN,
         },
         {

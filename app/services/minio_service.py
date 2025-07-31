@@ -33,18 +33,85 @@ class MinIOService:
                 status_code=500, detail=f"Failed to ensure bucket exists: {str(e)}"
             )
 
+    async def upload_bytes(
+        self,
+        data: bytes,
+        filename: str,
+        prefix: Optional[str] = None,
+        content_type: str = "application/octet-stream",
+    ) -> Dict[str, Any]:
+        """
+        Upload bytes data to MinIO storage.
+
+        Args:
+            data: Raw bytes data to upload
+            filename: File name to use in MinIO
+            prefix: Optional prefix to add to the object name
+            content_type: MIME type of the file
+
+        Returns:
+            Dict containing upload information
+        """
+        from io import BytesIO
+
+        try:
+            # Add timestamp prefix to avoid naming conflicts
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            object_name = (
+                f"{prefix}/{uuid4()}_{timestamp}_{filename}"
+                if prefix
+                else f"{uuid4()}_{timestamp}_{filename}"
+            )
+
+            file_size = len(data)
+            data_stream = BytesIO(data)
+
+            # Upload file in thread pool since MinIO client is synchronous
+            def _upload_sync():
+                return self.client.put_object(
+                    bucket_name=self.bucket_name,
+                    object_name=object_name,
+                    data=data_stream,
+                    length=file_size,
+                    content_type=content_type,
+                )
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _upload_sync)
+
+            return {
+                "success": True,
+                "object_name": object_name,
+                "bucket_name": self.bucket_name,
+                "size": file_size,
+                "content_type": content_type,
+                "etag": result.etag,
+                "version_id": result.version_id,
+                "upload_time": datetime.now().isoformat(),
+            }
+
+        except S3Error as e:
+            raise HTTPException(
+                status_code=500, detail=f"Failed to upload bytes to MinIO: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unexpected error during bytes upload: {str(e)}",
+            )
+
     async def upload_file(
         self,
         file: UploadFile,
         prefix: Optional[str] = None,
-        file_name: Optional[str] = None,
+        filename: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
         Upload a file to MinIO storage.
 
         Args:
             file: FastAPI UploadFile object
-            file_name: Optional custom file name to use in MinIO, defaults to original filename
+            filename: Optional custom file name to use in MinIO, defaults to original filename
             prefix: Optional prefix to add to the object name
 
         Returns:
@@ -52,12 +119,16 @@ class MinIOService:
         """
         try:
             # Use provided file name or original filename
-            if file_name is None:
-                file_name = file.filename
+            if filename is None:
+                filename = file.filename
 
             # Add timestamp prefix to avoid naming conflicts
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            object_name = f"{prefix or ''}{uuid4()}_{timestamp}_{file_name}"
+            object_name = (
+                f"{prefix}/{uuid4()}_{timestamp}_{filename}"
+                if prefix
+                else f"{uuid4()}_{timestamp}_{filename}"
+            )
 
             # Get file size from FastAPI UploadFile
             if file.size is None:
@@ -221,17 +292,18 @@ class MinIOService:
             Dict containing file data and metadata
         """
         try:
+
             def _get_object_sync():
                 try:
                     # Get object metadata first
                     object_stat = self.client.stat_object(self.bucket_name, object_name)
-                    
+
                     # Get object data
                     response = self.client.get_object(self.bucket_name, object_name)
                     data = response.read()
                     response.close()
                     response.release_conn()
-                    
+
                     return data, object_stat
                 except S3Error as e:
                     if e.code == "NoSuchKey":

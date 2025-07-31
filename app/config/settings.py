@@ -44,7 +44,13 @@ class Settings(BaseSettings):
     MINIO_ACCESS_KEY: str = "<your-minio-access-key>"
     MINIO_SECRET_KEY: str = "<your-minio-secret-key>"
     MINIO_BUCKET_NAME: str = "<your-minio-bucket-name>"
-    MINIO_SECURE: bool = False  # Set to False for http, True for https
+    MINIO_SECURE: bool = False
+
+    # CITI Program Automation
+    CITI_USERNAME: str = "<your-citi-username>"
+    CITI_PASSWORD: str = "<your-citi-password>"
+    CITI_HEADLESS: bool = True
+    CITI_TIMEOUT: int = 30000
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

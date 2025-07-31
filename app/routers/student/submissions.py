@@ -84,11 +84,11 @@ async def submit_certificate(
         # Check if student already has a submission for this requirement schedule
         existing_submission_stmt = select(CertificateSubmission).where(
             CertificateSubmission.student_id == student_id,
-            CertificateSubmission.requirement_schedule_id == requirement_schedule_id
+            CertificateSubmission.requirement_schedule_id == requirement_schedule_id,
         )
         existing_submission_result = await db_session.execute(existing_submission_stmt)
         existing_submission = existing_submission_result.scalar_one_or_none()
-        
+
         if existing_submission:
             raise BusinessLogicError(
                 f"Student already has a submission for this requirement. "
@@ -97,7 +97,7 @@ async def submit_certificate(
 
         # Upload file to MinIO with certificate code as prefix
         upload_result = await minio_service.upload_file(
-            file=file, prefix=f"{cert_type.code}/", file_name=file.filename
+            file=file, prefix=f"{cert_type.code}/", filename=file.filename
         )
 
         if not upload_result["success"]:
@@ -116,7 +116,7 @@ async def submit_certificate(
             cert_type_id=cert_type_id,
             requirement_schedule_id=requirement_schedule_id,
             file_object_name=upload_result["object_name"],
-            file_name=file.filename or "unknown",
+            filename=file.filename or "unknown",
             file_size=upload_result["size"],
             mime_type=upload_result["content_type"],
             agent_confidence_score=0.0,
@@ -135,7 +135,7 @@ async def submit_certificate(
 
         return ResponseBuilder.success(
             request=request,
-            data=response_data.model_dump(mode='json'),
+            data=response_data.model_dump(mode="json"),
             message="Certificate submitted successfully",
         )
 

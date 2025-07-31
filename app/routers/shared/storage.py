@@ -2,18 +2,16 @@ from typing import Annotated, List
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request, Query
 
 from app.services.minio_service import MinIOService
+from app.services.citi_automation_service import CitiProgramAutomationService
 from app.schemas.minio_schemas import (
     FileUploadResponse,
-    MultipleFileUploadResponse,
     FileDeleteResponse,
-    MultipleFileDeleteResponse,
     PresignedUrlResponse,
-    MultiplePresignedUrlResponse,
     FileListResponse,
     DeleteFileRequest,
-    DeleteMultipleFilesRequest,
     GenerateUrlRequest,
-    GenerateMultipleUrlsRequest,
+    CitiAutomationRequest,
+    CitiAutomationResponse,
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
@@ -24,6 +22,11 @@ storage_router = APIRouter()
 def get_minio_service() -> MinIOService:
     """Dependency to get MinIO service instance"""
     return MinIOService()
+
+
+def get_citi_automation_service() -> CitiProgramAutomationService:
+    """Dependency to get CITI automation service instance"""
+    return CitiProgramAutomationService()
 
 
 @storage_router.post("/upload", response_model=FileUploadResponse)
@@ -178,3 +181,47 @@ async def storage_health_check(
             message="Storage service is unhealthy",
             data={"error": str(e)},
         )
+
+
+@storage_router.post("/citi-automation", response_model=CitiAutomationResponse)
+async def citi_automation(
+    request: Request,
+    automation_request: CitiAutomationRequest,
+    citi_service: Annotated[
+        CitiProgramAutomationService, Depends(get_citi_automation_service)
+    ],
+):
+    """
+    Automate CITI Program certificate download
+
+    - Downloads certificate from provided CITI Program URL
+    - Handles login flow automatically using configured credentials
+    - Saves certificate to MinIO storage with specified filename and prefix
+    - Returns download result and MinIO upload metadata
+    """
+    try:
+        result = await citi_service.download_certificate(
+            url=automation_request.url,
+            filename=automation_request.filename,
+            prefix=automation_request.prefix,
+        )
+
+        if result:
+            return ResponseBuilder.success(
+                request=request,
+                data=result,
+                message=f"Certificate downloaded and saved to MinIO successfully",
+            )
+        else:
+            return ResponseBuilder.error(
+                request=request,
+                message="Failed to download certificate",
+                data={
+                    "success": False,
+                    "certificate_downloaded": False,
+                    "error_message": "Automation failed",
+                },
+            )
+
+    except Exception as e:
+        raise BusinessLogicError(f"CITI automation failed: {str(e)}")
