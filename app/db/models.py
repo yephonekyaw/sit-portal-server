@@ -85,6 +85,12 @@ class ProgReqRecurrenceType(enum.Enum):
     ANNUAL = "annual"
 
 
+class SubmissionTiming(enum.Enum):
+    ON_TIME = "on_time"
+    LATE = "late"
+    OVERDUE = "overdue"
+
+
 # Models
 class User(Base):
     __tablename__ = "users"
@@ -421,14 +427,19 @@ class CertificateSubmission(Base):
         UUID(as_uuid=True), ForeignKey("program_requirement_schedules.id")
     )
 
+    file_object_name: Mapped[str] = mapped_column(String)
     file_name: Mapped[str] = mapped_column(String)
-    file_key: Mapped[str] = mapped_column(String)
     file_size: Mapped[int] = mapped_column(Integer)
     mime_type: Mapped[str] = mapped_column(String)
-    status: Mapped[SubmissionStatus] = mapped_column(
+    submission_status: Mapped[SubmissionStatus] = mapped_column(
         Enum(SubmissionStatus), default=SubmissionStatus.PENDING
     )
-    agent_confidence_score: Mapped[Optional[float]] = mapped_column(Float)
+    agent_confidence_score: Mapped[Optional[float]] = mapped_column(
+        Float, server_default="0.0"
+    )
+    submission_timing: Mapped[SubmissionTiming] = mapped_column(
+        Enum(SubmissionTiming), default=SubmissionTiming.ON_TIME
+    )
     submitted_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
     expired_at: Mapped[Optional[datetime]]
@@ -443,6 +454,12 @@ class CertificateSubmission(Base):
     )
     verification_history: Mapped[List["VerificationHistory"]] = relationship(
         back_populates="submission"
+    )
+
+    # Constraints
+    __table_args__ = (
+        # Ensure unique submission per student, cert type, and schedule
+        UniqueConstraint("student_id", "cert_type_id", "requirement_schedule_id"),
     )
 
 

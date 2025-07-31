@@ -13,10 +13,10 @@ from app.config.settings import settings
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import AuthenticationError
 
-router = APIRouter(prefix="/auth", tags=["Authentication"])
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 
-@router.post("/login")
+@auth_router.post("/login")
 async def login(
     login_request: LoginRequest,
     request: Request,
@@ -85,7 +85,7 @@ async def login(
         raise AuthenticationError("Login failed")
 
 
-@router.post("/logout")
+@auth_router.post("/logout")
 async def logout(
     request: Request,
     response: Response,
@@ -112,7 +112,7 @@ async def logout(
     return ResponseBuilder.success(request=request, message="Logout successful")
 
 
-@router.get("/me")
+@auth_router.get("/me")
 async def get_current_user_info(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
@@ -141,7 +141,7 @@ async def get_current_user_info(
     )
 
 
-@router.post("/logout-all-sessions")
+@auth_router.post("/logout-all-sessions")
 async def logout_all_sessions(
     request: Request,
     response: Response,

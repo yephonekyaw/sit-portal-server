@@ -3,17 +3,20 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_session
-from app.schemas.staff_schemas import ImportStudentsRequest, ImportStudentsResponse
+from app.schemas.staff.staff_schemas import (
+    ImportStudentsRequest,
+    ImportStudentsResponse,
+)
 from app.services.student_service import StudentService
 
 # from app.middlewares.auth_middleware import require_user_type
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
 
-staff_router = APIRouter()
+students_router = APIRouter()
 
 
-@staff_router.post("/import-students")
+@students_router.post("/import", response_model=ImportStudentsResponse)
 async def import_students(
     data: ImportStudentsRequest,
     request: Request,

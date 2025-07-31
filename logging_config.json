@@ -5,7 +5,7 @@
     "level": "info",
     "rotation": "7 days",
     "retention": "7 days",
-    "console_format": "<level>{level: <8}</level> <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> request id: {extra[request_id]} - <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>",
-    "file_format": "{level: <8} {time:YYYY-MM-DD HH:mm:ss.SSS} request id: {extra[request_id]} - {name}:{function} - {message}"
+    "console_format": "<level>{level: <8}</level> <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> request id: {extra[request_id]} - <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    "file_format": "{level: <8} {time:YYYY-MM-DD HH:mm:ss.SSS} request id: {extra[request_id]} - {name}:{function}:{line} - {message}"
   }
 }

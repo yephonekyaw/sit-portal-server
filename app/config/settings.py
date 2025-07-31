@@ -39,6 +39,13 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
 
+    # MinIO Object Storage
+    MINIO_ENDPOINT: str = "<your-minio-endpoint>"
+    MINIO_ACCESS_KEY: str = "<your-minio-access-key>"
+    MINIO_SECRET_KEY: str = "<your-minio-secret-key>"
+    MINIO_BUCKET_NAME: str = "<your-minio-bucket-name>"
+    MINIO_SECURE: bool = False  # Set to False for http, True for https
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if not v:
