@@ -212,3 +212,8 @@ class DocumentService:
             "confidence": 0,
             "error": error_message,
         }
+
+
+def get_document_service() -> DocumentService:
+    """Dependency to get Document service instance."""
+    return DocumentService()

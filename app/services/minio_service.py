@@ -210,6 +210,66 @@ class MinIOService:
                 detail=f"Unexpected error generating presigned URL: {str(e)}",
             )
 
+    async def get_file(self, object_name: str) -> Dict[str, Any]:
+        """
+        Retrieve a file from MinIO storage.
+
+        Args:
+            object_name: Name of the object to retrieve
+
+        Returns:
+            Dict containing file data and metadata
+        """
+        try:
+            def _get_object_sync():
+                try:
+                    # Get object metadata first
+                    object_stat = self.client.stat_object(self.bucket_name, object_name)
+                    
+                    # Get object data
+                    response = self.client.get_object(self.bucket_name, object_name)
+                    data = response.read()
+                    response.close()
+                    response.release_conn()
+                    
+                    return data, object_stat
+                except S3Error as e:
+                    if e.code == "NoSuchKey":
+                        raise HTTPException(
+                            status_code=404,
+                            detail=f"File '{object_name}' not found in bucket '{self.bucket_name}'",
+                        )
+                    raise e
+
+            loop = asyncio.get_event_loop()
+            file_data, object_stat = await loop.run_in_executor(None, _get_object_sync)
+
+            return {
+                "success": True,
+                "object_name": object_name,
+                "bucket_name": self.bucket_name,
+                "data": file_data,
+                "size": object_stat.size,
+                "content_type": object_stat.content_type,
+                "last_modified": (
+                    object_stat.last_modified.isoformat()
+                    if object_stat.last_modified
+                    else None
+                ),
+                "etag": object_stat.etag,
+            }
+
+        except HTTPException:
+            raise
+        except S3Error as e:
+            raise HTTPException(
+                status_code=500, detail=f"Failed to retrieve file from MinIO: {str(e)}"
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=500, detail=f"Unexpected error retrieving file: {str(e)}"
+            )
+
     async def list_files(self, prefix: str = "", limit: int = 100) -> Dict[str, Any]:
         """
         List files in the MinIO bucket.

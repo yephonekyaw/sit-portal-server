@@ -8,7 +8,7 @@ from app.config.settings import settings
 
 class LangChainService:
     """Service for LangChain operations with Google Gemini integration"""
-    
+
     def __init__(self):
         self.google_api_key = settings.GEMINI_API_KEY
         self.gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
@@ -34,3 +34,8 @@ class LangChainService:
     ) -> PromptTemplate:
         """Returns a custom prompt template with the provided variables."""
         return PromptTemplate(input_variables=input_variables, template=template)
+
+
+def get_langchain_service() -> LangChainService:
+    """Dependency to get LangChain service instance."""
+    return LangChainService()
