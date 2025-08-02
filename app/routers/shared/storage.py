@@ -1,4 +1,4 @@
-from typing import Annotated, List
+from typing import Annotated
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Request, Query
 
 from app.services.minio_service import MinIOService

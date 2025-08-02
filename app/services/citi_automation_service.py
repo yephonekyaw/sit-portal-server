@@ -1,7 +1,6 @@
 import asyncio
 import re
 import sys
-from concurrent.futures import ProcessPoolExecutor
 from typing import Optional, Dict, Any
 from playwright.async_api import async_playwright, Error as PlaywrightError
 
@@ -12,22 +11,37 @@ from app.services.minio_service import MinIOService
 logger = get_logger()
 
 
-def run_playwright_automation_sync(
-    url: str, username: str, password: str, headless: bool, timeout: int
-) -> Optional[bytes]:
-    """
-    Synchronous function to run Playwright automation in a separate process.
-    """
-    # Set event loop policy for Windows
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+class CitiProgramAutomationService:
+    """Service for automating CITI Program certificate downloads."""
 
-    async def _automation():
-        certificate_data = None  # Initialize at function scope
+    def __init__(self):
+        self.minio_service = MinIOService()
+        # Set Windows event loop policy if needed
+        if sys.platform == "win32":
+            try:
+                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+            except Exception as e:
+                logger.warning(f"Could not set Windows event loop policy: {e}")
+
+    async def _run_playwright_automation(
+        self, url: str, username: str, password: str, headless: bool, timeout: int
+    ) -> Optional[bytes]:
+        """Run Playwright automation to download certificate."""
+        certificate_data = None
 
         try:
+            logger.info(f"Starting CITI Program Playwright automation on URL: {url}")
+            # Launch Playwright browser
             async with async_playwright() as p:
-                browser = await p.chromium.launch(headless=headless, timeout=timeout)
+                browser = await p.chromium.launch(
+                    headless=headless,
+                    timeout=timeout,
+                    args=[
+                        "--no-sandbox",
+                        "--disable-dev-shm-usage",
+                    ],  # Better for containerized environments
+                )
+
                 context = await browser.new_context(
                     accept_downloads=True,
                     user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -35,11 +49,13 @@ def run_playwright_automation_sync(
 
                 try:
                     # Navigate to initial page
+                    logger.info(f"Navigating to CITI URL: {url}")
                     page = await context.new_page()
-                    await page.goto(url)
+                    await page.goto(url, timeout=timeout)
                     await page.wait_for_load_state("networkidle")
 
                     # Handle login page opening
+                    logger.info("Requesting login page...")
                     async with page.context.expect_page() as new_page_info:
                         await page.get_by_role(
                             "link",
@@ -47,6 +63,7 @@ def run_playwright_automation_sync(
                         ).click()
 
                     # Login process
+                    logger.info("Trying to log in...")
                     new_page = await new_page_info.value
                     await new_page.wait_for_load_state("networkidle")
                     await new_page.fill("#main-login-username", username)
@@ -64,7 +81,7 @@ def run_playwright_automation_sync(
                         await route.continue_()
 
                     await pdf_page.route("**/*", handle_pdf_requests)
-                    await pdf_page.goto(url)
+                    await pdf_page.goto(url, timeout=timeout)
                     await pdf_page.wait_for_load_state("networkidle")
 
                     # Wait for the PDF to be captured
@@ -73,31 +90,27 @@ def run_playwright_automation_sync(
                 except PlaywrightError as e:
                     if "net::ERR_ABORTED" in str(e):
                         logger.warning(
-                            "Request aborted, expected behaviour due to headless browsing mode."
+                            "Request aborted - this may be expected behavior in headless mode"
                         )
                         # certificate_data may have been captured before the abort
                     else:
-                        logger.error(f"Playwright error: {e}")
+                        logger.error(f"Playwright error during automation: {e}")
+                        raise
 
                 except Exception as e:
                     logger.error(f"Automation error: {e}")
+                    raise
 
                 finally:
+                    logger.info("Closing Playwright browser")
                     await context.close()
+                    await browser.close()
 
         except Exception as e:
-            logger.error(f"Playwright failed: {e}")
+            logger.error(f"Playwright automation failed: {e}")
+            raise
 
         return certificate_data
-
-    return asyncio.run(_automation())
-
-
-class CitiProgramAutomationService:
-    """Service for automating CITI Program certificate downloads."""
-
-    def __init__(self):
-        self.minio_service = MinIOService()
 
     async def download_certificate(
         self, url: str, filename: Optional[str] = None, prefix: Optional[str] = None
@@ -106,28 +119,21 @@ class CitiProgramAutomationService:
 
         if not settings.CITI_USERNAME or not settings.CITI_PASSWORD:
             logger.error("CITI credentials not configured")
-            return None
+            return {"success": False, "error": "CITI credentials not configured"}
 
         filename = filename or "citi_certificate.pdf"
         prefix = prefix or "temp"
 
         try:
-            logger.info("Starting CITI automation...")
+            certificate_data = await self._run_playwright_automation(
+                url=url,
+                username=settings.CITI_USERNAME,
+                password=settings.CITI_PASSWORD,
+                headless=settings.CITI_HEADLESS,
+                timeout=settings.CITI_TIMEOUT,
+            )
 
-            # Run automation in separate process
-            loop = asyncio.get_event_loop()
-            with ProcessPoolExecutor(max_workers=1) as executor:
-                certificate_data = await loop.run_in_executor(
-                    executor,
-                    run_playwright_automation_sync,
-                    url,
-                    settings.CITI_USERNAME,
-                    settings.CITI_PASSWORD,
-                    settings.CITI_HEADLESS,
-                    settings.CITI_TIMEOUT,
-                )
-
-            if certificate_data:
+            if certificate_data and len(certificate_data) > 0:
                 # Upload to MinIO
                 upload_result = await self.minio_service.upload_bytes(
                     data=certificate_data,
@@ -136,19 +142,26 @@ class CitiProgramAutomationService:
                     content_type="application/pdf",
                 )
 
-                logger.info(f"Certificate uploaded: {upload_result['object_name']}")
+                logger.info(
+                    f"Certificate uploaded successfully: {upload_result['object_name']}"
+                )
                 return {
                     "success": True,
                     "certificate_downloaded": True,
                     "minio_upload": upload_result,
+                    "certificate_size": len(certificate_data),
                 }
             else:
                 logger.warning("No certificate data captured")
-                return None
+                return {
+                    "success": False,
+                    "certificate_downloaded": False,
+                    "error": "No certificate data captured",
+                }
 
         except Exception as e:
             logger.error(f"CITI automation failed: {e}")
-            return None
+            return {"success": False, "certificate_downloaded": False, "error": str(e)}
 
 
 def get_citi_automation_service() -> CitiProgramAutomationService:

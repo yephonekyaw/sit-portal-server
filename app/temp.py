@@ -1,6 +1,5 @@
 import asyncio
 import re
-import time
 from playwright.async_api import async_playwright
 import os
 from app.utils.logging import get_logger
@@ -19,7 +18,7 @@ async def test_playwright_browser():
     async with async_playwright() as p:
         # Launch browser in non-headless mode for visibility
         browser = await p.chromium.launch(
-            headless=True,  # Set to False to see the browser
+            headless=False,  # Set to False to see the browser
             slow_mo=1000,  # Optional: slow down actions by 1 second for visibility
             timeout=60000,  # Optional: set a timeout for browser launch
         )
@@ -67,7 +66,7 @@ async def test_playwright_browser():
             await new_page.fill("#main-login-username", "yephonekyaw")
 
             # Fill password field
-            await new_page.fill("#main-login-password", f"^C#8,Q%f_BxP:wc")
+            await new_page.fill("#main-login-password", f"8uPG?-y6jvid7A2")
 
             # Click the Log In button
             logger.info("Clicking Log In button...")

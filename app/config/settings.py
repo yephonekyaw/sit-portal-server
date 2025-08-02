@@ -52,6 +52,14 @@ class Settings(BaseSettings):
     CITI_HEADLESS: bool = True
     CITI_TIMEOUT: int = 30000
 
+    # Redis & Celery
+    REDIS_PASSWORD: str = "<your-redis-password>"
+    REDIS_HOST: str = "localhost"
+    REDIS_PORT: int = 6379
+    REDIS_DB: int = 0
+    CELERY_BROKER_URL: str = "redis://:your-redis-password@localhost:6379/0"
+    CELERY_RESULT_BACKEND: str = "redis://:your-redis-password@localhost:6379/0"
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if not v:

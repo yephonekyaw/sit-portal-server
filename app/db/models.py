@@ -12,6 +12,8 @@ from sqlalchemy import (
     Index,
     func,
     UniqueConstraint,
+    CheckConstraint,
+    DateTime,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -32,6 +34,8 @@ class UserType(enum.Enum):
 class EnrollmentStatus(enum.Enum):
     ACTIVE = "active"
     INACTIVE = "inactive"
+    SUSPENDED = "suspended"
+    GRADUATED = "graduated"
 
 
 class SubmissionStatus(enum.Enum):
@@ -63,6 +67,7 @@ class ChannelType(enum.Enum):
     IN_APP = "in_app"
     MICROSOFT_TEAMS = "microsoft_teams"
     LINE_APP = "line_app"
+    EMAIL = "email"  # Added common notification channel
 
 
 class TemplateFormat(enum.Enum):
@@ -83,6 +88,7 @@ class NotificationStatus(enum.Enum):
 class ProgReqRecurrenceType(enum.Enum):
     ONCE = "once"
     ANNUAL = "annual"
+    SEMESTER = "semester"  # Added for more flexibility
 
 
 class SubmissionTiming(enum.Enum):
@@ -91,149 +97,249 @@ class SubmissionTiming(enum.Enum):
     OVERDUE = "overdue"
 
 
+# Base model with common audit fields
+class AuditMixin:
+    """Mixin for common audit fields"""
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), onupdate=func.now()
+    )
+
+
 # Models
-class User(Base):
+class User(Base, AuditMixin):
     __tablename__ = "users"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),  # Use database function
     )
-    email: Mapped[str] = mapped_column(String(255), unique=True)
-    password_hash: Mapped[str] = mapped_column(String(255))
-    first_name: Mapped[str] = mapped_column(String(100))
-    last_name: Mapped[str] = mapped_column(String(100))
-    user_type: Mapped[UserType] = mapped_column(Enum(UserType))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    email: Mapped[str] = mapped_column(String(320), unique=True)  # RFC 5321 max length
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    user_type: Mapped[UserType] = mapped_column(Enum(UserType), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     refresh_token: Mapped[Optional[str]] = mapped_column(String(500))
-    access_token_version: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
-    last_login: Mapped[Optional[datetime]]
+    access_token_version: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
-    student: Mapped[Optional["Student"]] = relationship(back_populates="user")
-    staff: Mapped[Optional["Staff"]] = relationship(back_populates="user")
+    student: Mapped[Optional["Student"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    staff: Mapped[Optional["Staff"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
     notification_recipients: Mapped[List["NotificationRecipient"]] = relationship(
-        back_populates="recipient"
+        back_populates="recipient", cascade="all, delete-orphan"
+    )
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "length(first_name) >= 1", name="ck_users_first_name_not_empty"
+        ),
+        CheckConstraint("length(last_name) >= 1", name="ck_users_last_name_not_empty"),
+        CheckConstraint(
+            "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
+            name="ck_users_email_format",
+        ),
+        Index("idx_users_email", "email"),
+        Index("idx_users_type_active", "user_type", "is_active"),
+        Index("idx_users_last_login", "last_login"),
     )
 
 
-class Student(Base):
+class Student(Base, AuditMixin):
     __tablename__ = "students"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,  # One-to-one relationship
+        nullable=False,
     )
-    sit_email: Mapped[str] = mapped_column(String(255), unique=True)
-    roll_number: Mapped[str] = mapped_column(String(20), unique=True)
+    sit_email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
+    roll_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     program_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("programs.id")
+        UUID(as_uuid=True),
+        ForeignKey("programs.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     academic_year_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id")
+        UUID(as_uuid=True),
+        ForeignKey("academic_years.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     line_application_id: Mapped[Optional[str]] = mapped_column(String(100), unique=True)
-    enrollment_status: Mapped[EnrollmentStatus] = mapped_column(Enum(EnrollmentStatus))
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    enrollment_status: Mapped[EnrollmentStatus] = mapped_column(
+        Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="student")
     program: Mapped["Program"] = relationship(back_populates="students")
     academic_year: Mapped["AcademicYear"] = relationship(back_populates="students")
     certificate_submissions: Mapped[List["CertificateSubmission"]] = relationship(
-        back_populates="student"
+        back_populates="student", cascade="all, delete-orphan"
+    )
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "length(roll_number) >= 1", name="ck_students_roll_number_not_empty"
+        ),
+        CheckConstraint(
+            "sit_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
+            name="ck_students_sit_email_format",
+        ),
+        Index("idx_students_user_id", "user_id"),
+        Index("idx_students_program_id", "program_id"),
+        Index("idx_students_academic_year_id", "academic_year_id"),
+        Index("idx_students_enrollment_status", "enrollment_status"),
+        Index("idx_students_roll_number", "roll_number"),
     )
 
 
-class Staff(Base):
+class Staff(Base, AuditMixin):
     __tablename__ = "staff"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     user_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,  # One-to-one relationship
+        nullable=False,
     )
-    employee_id: Mapped[str] = mapped_column(String, unique=True)
-    department: Mapped[str] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    employee_id: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    department: Mapped[str] = mapped_column(String(100), nullable=False)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="staff")
     staff_permissions: Mapped[List["StaffPermission"]] = relationship(
-        back_populates="staff", foreign_keys="StaffPermission.staff_id"
+        back_populates="staff",
+        foreign_keys="StaffPermission.staff_id",
+        cascade="all, delete-orphan",
     )
     assigned_permissions: Mapped[List["StaffPermission"]] = relationship(
         back_populates="assigned_by_staff", foreign_keys="StaffPermission.assigned_by"
     )
 
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "length(employee_id) >= 1", name="ck_staff_employee_id_not_empty"
+        ),
+        CheckConstraint(
+            "length(department) >= 1", name="ck_staff_department_not_empty"
+        ),
+        Index("idx_staff_user_id", "user_id"),
+        Index("idx_staff_employee_id", "employee_id"),
+        Index("idx_staff_department", "department"),
+    )
 
-class Role(Base):
+
+class Role(Base, AuditMixin):
     __tablename__ = "roles"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
-    name: Mapped[str] = mapped_column(String, unique=True)
-    description: Mapped[str] = mapped_column(String)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
 
     # Relationships
-    permissions: Mapped[List["Permission"]] = relationship(back_populates="role")
+    permissions: Mapped[List["Permission"]] = relationship(
+        back_populates="role", cascade="all, delete-orphan"
+    )
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("length(name) >= 1", name="ck_roles_name_not_empty"),
+        Index("idx_roles_name", "name"),
+    )
 
 
-class Permission(Base):
+class Permission(Base, AuditMixin):
     __tablename__ = "permissions"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     program_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("programs.id")
+        UUID(as_uuid=True),
+        ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
     )
     role_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("roles.id")
+        UUID(as_uuid=True), ForeignKey("roles.id", ondelete="CASCADE"), nullable=False
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
     # Relationships
     program: Mapped["Program"] = relationship(back_populates="permissions")
     role: Mapped["Role"] = relationship(back_populates="permissions")
     staff_permissions: Mapped[List["StaffPermission"]] = relationship(
-        back_populates="permission"
+        back_populates="permission", cascade="all, delete-orphan"
     )
 
     # Constraints
-    __table_args__ = (UniqueConstraint("program_id", "role_id"),)
+    __table_args__ = (
+        UniqueConstraint("program_id", "role_id", name="uq_permissions_program_role"),
+        Index("idx_permissions_program_id", "program_id"),
+        Index("idx_permissions_role_id", "role_id"),
+    )
 
 
-class StaffPermission(Base):
+class StaffPermission(Base, AuditMixin):
     __tablename__ = "staff_permissions"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     staff_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("staff.id")
+        UUID(as_uuid=True), ForeignKey("staff.id", ondelete="CASCADE"), nullable=False
     )
     permission_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("permissions.id")
+        UUID(as_uuid=True),
+        ForeignKey("permissions.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     assigned_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("staff.id")
+        UUID(as_uuid=True), ForeignKey("staff.id", ondelete="SET NULL")
     )
-    assigned_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    expires_at: Mapped[Optional[datetime]]
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     staff: Mapped["Staff"] = relationship(
@@ -245,61 +351,92 @@ class StaffPermission(Base):
     )
 
     # Constraints
-    __table_args__ = (UniqueConstraint("staff_id", "permission_id"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "staff_id", "permission_id", name="uq_staff_permissions_staff_permission"
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > assigned_at",
+            name="ck_staff_permissions_expires_after_assigned",
+        ),
+        Index("idx_staff_permissions_staff_id", "staff_id"),
+        Index("idx_staff_permissions_permission_id", "permission_id"),
+        Index("idx_staff_permissions_is_active", "is_active"),
+        Index("idx_staff_permissions_expires_at", "expires_at"),
+    )
 
 
-class Program(Base):
+class Program(Base, AuditMixin):
     __tablename__ = "programs"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
-    program_code: Mapped[str] = mapped_column(String, unique=True)
-    program_name: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(Text)
-    duration_years: Mapped[int] = mapped_column(Integer, default=4)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    program_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    program_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    duration_years: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
     students: Mapped[List["Student"]] = relationship(back_populates="program")
     program_requirements: Mapped[List["ProgramRequirement"]] = relationship(
-        back_populates="program"
+        back_populates="program", cascade="all, delete-orphan"
     )
     dashboard_stats: Mapped[List["DashboardStats"]] = relationship(
         back_populates="program"
     )
-    permissions: Mapped[List["Permission"]] = relationship(back_populates="program")
+    permissions: Mapped[List["Permission"]] = relationship(
+        back_populates="program", cascade="all, delete-orphan"
+    )
+
+    # Constraints
+    __table_args__ = (
+        CheckConstraint("length(program_code) >= 1", name="ck_programs_code_not_empty"),
+        CheckConstraint("length(program_name) >= 1", name="ck_programs_name_not_empty"),
+        CheckConstraint("duration_years > 0", name="ck_programs_duration_positive"),
+        Index("idx_programs_code", "program_code"),
+        Index("idx_programs_is_active", "is_active"),
+    )
 
 
-class ProgramRequirement(Base):
-
+class ProgramRequirement(Base, AuditMixin):
     __tablename__ = "program_requirements"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     program_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("programs.id")
+        UUID(as_uuid=True),
+        ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
     )
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("certificate_types.id")
+        UUID(as_uuid=True),
+        ForeignKey("certificate_types.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    name: Mapped[str] = mapped_column(String)
-    target_year: Mapped[int] = mapped_column(Integer)
-    deadline_month: Mapped[int] = mapped_column(Integer)
-    deadline_day: Mapped[int] = mapped_column(Integer)
-    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    target_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    deadline_month: Mapped[int] = mapped_column(Integer, nullable=False)
+    deadline_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     special_instruction: Mapped[Optional[str]] = mapped_column(Text)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     recurrence_type: Mapped[ProgReqRecurrenceType] = mapped_column(
         Enum(ProgReqRecurrenceType),
         default=ProgReqRecurrenceType.ANNUAL,
+        nullable=False,
     )
-    last_recurred_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    last_recurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
     # Relationships
     program: Mapped["Program"] = relationship(back_populates="program_requirements")
@@ -307,36 +444,60 @@ class ProgramRequirement(Base):
         back_populates="program_requirements"
     )
     requirement_schedules: Mapped[List["ProgramRequirementSchedule"]] = relationship(
-        back_populates="program_requirement"
+        back_populates="program_requirement", cascade="all, delete-orphan"
     )
 
     # Constraints
     __table_args__ = (
-        UniqueConstraint("program_id", "cert_type_id", "target_year"),
+        UniqueConstraint(
+            "program_id",
+            "cert_type_id",
+            "target_year",
+            name="uq_program_requirements_program_cert_year",
+        ),
+        CheckConstraint(
+            "target_year >= 1", name="ck_program_requirements_target_year_positive"
+        ),
+        CheckConstraint(
+            "deadline_month >= 1 AND deadline_month <= 12",
+            name="ck_program_requirements_deadline_month_valid",
+        ),
+        CheckConstraint(
+            "deadline_day >= 1 AND deadline_day <= 31",
+            name="ck_program_requirements_deadline_day_valid",
+        ),
+        Index("idx_program_requirements_program_id", "program_id"),
+        Index("idx_program_requirements_cert_type_id", "cert_type_id"),
+        Index("idx_program_requirements_target_year", "target_year"),
+        Index("idx_program_requirements_is_active", "is_active"),
         Index("idx_program_requirements_program_active", "program_id", "is_active"),
     )
 
 
-class ProgramRequirementSchedule(Base):
-    """
-    Academic year-specific deadlines for program requirements
-    This table gets populated by scheduled jobs for each new academic year
-    """
+class ProgramRequirementSchedule(Base, AuditMixin):
+    """Academic year-specific deadlines for program requirements"""
 
     __tablename__ = "program_requirement_schedules"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     program_requirement_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("program_requirements.id")
+        UUID(as_uuid=True),
+        ForeignKey("program_requirements.id", ondelete="CASCADE"),
+        nullable=False,
     )
     academic_year_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id")
+        UUID(as_uuid=True),
+        ForeignKey("academic_years.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    submission_deadline: Mapped[datetime] = mapped_column()
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    submission_deadline: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
 
     # Relationships
     program_requirement: Mapped["ProgramRequirement"] = relationship(
@@ -354,25 +515,34 @@ class ProgramRequirementSchedule(Base):
 
     # Constraints
     __table_args__ = (
-        # One schedule per requirement per academic year
-        UniqueConstraint("program_requirement_id", "academic_year_id"),
+        UniqueConstraint(
+            "program_requirement_id",
+            "academic_year_id",
+            name="uq_requirement_schedules_requirement_year",
+        ),
         Index("idx_requirement_schedules_academic_year", "academic_year_id"),
         Index("idx_requirement_schedules_deadline", "submission_deadline"),
+        Index(
+            "idx_requirement_schedules_program_requirement", "program_requirement_id"
+        ),
     )
 
 
-class AcademicYear(Base):
+class AcademicYear(Base, AuditMixin):
     __tablename__ = "academic_years"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
-    year_code: Mapped[str] = mapped_column(String, unique=True)  # e.g., "2023", "2024"
-    start_date: Mapped[datetime]
-    end_date: Mapped[datetime]
-    is_current: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    year_code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+    start_date: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    end_date: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
     students: Mapped[List["Student"]] = relationship(back_populates="academic_year")
@@ -383,21 +553,32 @@ class AcademicYear(Base):
         back_populates="academic_year"
     )
 
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "end_date > start_date", name="ck_academic_years_end_after_start"
+        ),
+        Index("idx_academic_years_year_code", "year_code"),
+        Index("idx_academic_years_is_current", "is_current"),
+        Index("idx_academic_years_dates", "start_date", "end_date"),
+    )
 
-class CertificateType(Base):
+
+class CertificateType(Base, AuditMixin):
     __tablename__ = "certificate_types"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
-    code: Mapped[str] = mapped_column(String, unique=True)
-    name: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(Text)
-    verification_template: Mapped[str] = mapped_column(Text)
-    has_expiration: Mapped[bool] = mapped_column(Boolean, default=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    verification_template: Mapped[str] = mapped_column(Text, nullable=False)
+    has_expiration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
     program_requirements: Mapped[List["ProgramRequirement"]] = relationship(
@@ -410,39 +591,57 @@ class CertificateType(Base):
         back_populates="certificate_type"
     )
 
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "length(code) >= 1", name="ck_certificate_types_code_not_empty"
+        ),
+        CheckConstraint(
+            "length(name) >= 1", name="ck_certificate_types_name_not_empty"
+        ),
+        Index("idx_certificate_types_code", "code"),
+        Index("idx_certificate_types_is_active", "is_active"),
+    )
 
-class CertificateSubmission(Base):
+
+class CertificateSubmission(Base, AuditMixin):
     __tablename__ = "certificate_submissions"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     student_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("students.id")
+        UUID(as_uuid=True),
+        ForeignKey("students.id", ondelete="CASCADE"),
+        nullable=False,
     )
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("certificate_types.id")
+        UUID(as_uuid=True),
+        ForeignKey("certificate_types.id", ondelete="RESTRICT"),
+        nullable=False,
     )
     requirement_schedule_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("program_requirement_schedules.id")
+        UUID(as_uuid=True),
+        ForeignKey("program_requirement_schedules.id", ondelete="SET NULL"),
     )
-
-    file_object_name: Mapped[str] = mapped_column(String)
-    filename: Mapped[str] = mapped_column(String)
-    file_size: Mapped[int] = mapped_column(Integer)
-    mime_type: Mapped[str] = mapped_column(String)
+    file_object_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    filename: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
     submission_status: Mapped[SubmissionStatus] = mapped_column(
-        Enum(SubmissionStatus), default=SubmissionStatus.PENDING
+        Enum(SubmissionStatus), default=SubmissionStatus.PENDING, nullable=False
     )
-    agent_confidence_score: Mapped[Optional[float]] = mapped_column(
-        Float, server_default="0.0"
-    )
+    agent_confidence_score: Mapped[Optional[float]] = mapped_column(Float)
     submission_timing: Mapped[SubmissionTiming] = mapped_column(
-        Enum(SubmissionTiming), default=SubmissionTiming.ON_TIME
+        Enum(SubmissionTiming), default=SubmissionTiming.ON_TIME, nullable=False
     )
-    submitted_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
-    expired_at: Mapped[Optional[datetime]]
+    submitted_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     student: Mapped["Student"] = relationship(back_populates="certificate_submissions")
@@ -453,92 +652,154 @@ class CertificateSubmission(Base):
         back_populates="certificate_submissions"
     )
     verification_history: Mapped[List["VerificationHistory"]] = relationship(
-        back_populates="submission"
+        back_populates="submission", cascade="all, delete-orphan"
     )
 
     # Constraints
     __table_args__ = (
-        # Ensure unique submission per student, cert type, and schedule
-        UniqueConstraint("student_id", "cert_type_id", "requirement_schedule_id"),
+        UniqueConstraint(
+            "student_id",
+            "cert_type_id",
+            "requirement_schedule_id",
+            name="uq_certificate_submissions_student_cert_schedule",
+        ),
+        CheckConstraint(
+            "file_size > 0", name="ck_certificate_submissions_file_size_positive"
+        ),
+        CheckConstraint(
+            "agent_confidence_score IS NULL OR (agent_confidence_score >= 0 AND agent_confidence_score <= 1)",
+            name="ck_certificate_submissions_confidence_score_range",
+        ),
+        CheckConstraint(
+            "expired_at IS NULL OR expired_at > submitted_at",
+            name="ck_certificate_submissions_expired_after_submitted",
+        ),
+        Index("idx_certificate_submissions_student_id", "student_id"),
+        Index("idx_certificate_submissions_cert_type_id", "cert_type_id"),
+        Index(
+            "idx_certificate_submissions_requirement_schedule_id",
+            "requirement_schedule_id",
+        ),
+        Index("idx_certificate_submissions_submission_status", "submission_status"),
+        Index("idx_certificate_submissions_submission_timing", "submission_timing"),
+        Index("idx_certificate_submissions_submitted_at", "submitted_at"),
+        Index("idx_certificate_submissions_expired_at", "expired_at"),
     )
 
 
-class VerificationHistory(Base):
+class VerificationHistory(Base, AuditMixin):
     __tablename__ = "verification_history"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     submission_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("certificate_submissions.id")
+        UUID(as_uuid=True),
+        ForeignKey("certificate_submissions.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    verifier_id: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True)
-    )  # FK or Agent
-    verification_type: Mapped[VerificationType] = mapped_column(Enum(VerificationType))
-    old_status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
-    new_status: Mapped[SubmissionStatus] = mapped_column(Enum(SubmissionStatus))
+    verifier_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
+    verification_type: Mapped[VerificationType] = mapped_column(
+        Enum(VerificationType), nullable=False
+    )
+    old_status: Mapped[SubmissionStatus] = mapped_column(
+        Enum(SubmissionStatus), nullable=False
+    )
+    new_status: Mapped[SubmissionStatus] = mapped_column(
+        Enum(SubmissionStatus), nullable=False
+    )
     comments: Mapped[Optional[str]] = mapped_column(Text)
-    reasons: Mapped[Optional[str]] = mapped_column(
-        Text
-    )  # rejection reasons from staff or agent
+    reasons: Mapped[Optional[str]] = mapped_column(Text)
     agent_analysis_result: Mapped[Optional[dict]] = mapped_column(JSON)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
 
     # Relationships
     submission: Mapped["CertificateSubmission"] = relationship(
         back_populates="verification_history"
     )
 
+    # Constraints
+    __table_args__ = (
+        CheckConstraint(
+            "old_status != new_status", name="ck_verification_history_status_change"
+        ),
+        Index("idx_verification_history_submission_id", "submission_id"),
+        Index("idx_verification_history_verifier_id", "verifier_id"),
+        Index("idx_verification_history_verification_type", "verification_type"),
+        Index("idx_verification_history_created_at", "created_at"),
+    )
 
-class NotificationType(Base):
+
+class NotificationType(Base, AuditMixin):
     __tablename__ = "notification_types"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
-    code: Mapped[str] = mapped_column(String, unique=True)
-    name: Mapped[str] = mapped_column(String)
-    description: Mapped[str] = mapped_column(String)
-    entity_type: Mapped[str] = mapped_column(String)
+    code: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(100), nullable=False)
     default_priority: Mapped[Priority] = mapped_column(
-        Enum(Priority), default=Priority.MEDIUM
+        Enum(Priority), default=Priority.MEDIUM, nullable=False
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
     channel_templates: Mapped[List["NotificationChannelTemplate"]] = relationship(
-        back_populates="notification_type"
+        back_populates="notification_type", cascade="all, delete-orphan"
     )
     notifications: Mapped[List["Notification"]] = relationship(
         back_populates="notification_type"
     )
 
     # Constraints
-    __table_args__ = (UniqueConstraint("entity_type", "code"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "entity_type", "code", name="uq_notification_types_entity_code"
+        ),
+        CheckConstraint(
+            "length(code) >= 1", name="ck_notification_types_code_not_empty"
+        ),
+        CheckConstraint(
+            "length(name) >= 1", name="ck_notification_types_name_not_empty"
+        ),
+        CheckConstraint(
+            "length(entity_type) >= 1",
+            name="ck_notification_types_entity_type_not_empty",
+        ),
+        Index("idx_notification_types_code", "code"),
+        Index("idx_notification_types_entity_type", "entity_type"),
+        Index("idx_notification_types_is_active", "is_active"),
+    )
 
 
-class NotificationChannelTemplate(Base):
+class NotificationChannelTemplate(Base, AuditMixin):
     __tablename__ = "notification_channel_templates"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     notification_type_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notification_types.id")
+        UUID(as_uuid=True),
+        ForeignKey("notification_types.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    channel_type: Mapped[ChannelType] = mapped_column(Enum(ChannelType))
-    template_subject: Mapped[Optional[str]] = mapped_column(String)
-    template_body: Mapped[str] = mapped_column(String)
+    channel_type: Mapped[ChannelType] = mapped_column(Enum(ChannelType), nullable=False)
+    template_subject: Mapped[Optional[str]] = mapped_column(String(500))
+    template_body: Mapped[str] = mapped_column(Text, nullable=False)
     template_format: Mapped[TemplateFormat] = mapped_column(
-        Enum(TemplateFormat), default=TemplateFormat.TEXT
+        Enum(TemplateFormat), default=TemplateFormat.TEXT, nullable=False
     )
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     # Relationships
     notification_type: Mapped["NotificationType"] = relationship(
@@ -546,115 +807,199 @@ class NotificationChannelTemplate(Base):
     )
 
     # Constraints
-    __table_args__ = (UniqueConstraint("notification_type_id", "channel_type"),)
+    __table_args__ = (
+        UniqueConstraint(
+            "notification_type_id",
+            "channel_type",
+            name="uq_notification_channel_templates_type_channel",
+        ),
+        CheckConstraint(
+            "length(template_body) >= 1",
+            name="ck_notification_channel_templates_body_not_empty",
+        ),
+        Index(
+            "idx_notification_channel_templates_notification_type",
+            "notification_type_id",
+        ),
+        Index("idx_notification_channel_templates_channel_type", "channel_type"),
+        Index("idx_notification_channel_templates_is_active", "is_active"),
+    )
 
 
-class Notification(Base):
+class Notification(Base, AuditMixin):
     __tablename__ = "notifications"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     notification_type_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notification_types.id")
+        UUID(as_uuid=True),
+        ForeignKey("notification_types.id", ondelete="RESTRICT"),
+        nullable=False,
     )
-    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True))
-    actor_type: Mapped[ActorType] = mapped_column(Enum(ActorType))
+    entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    actor_type: Mapped[ActorType] = mapped_column(Enum(ActorType), nullable=False)
     actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
-    subject: Mapped[str] = mapped_column(String)
-    body: Mapped[str] = mapped_column(Text)
-    priority: Mapped[Priority] = mapped_column(Enum(Priority), default=Priority.MEDIUM)
+    subject: Mapped[str] = mapped_column(String(500), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    priority: Mapped[Priority] = mapped_column(
+        Enum(Priority), default=Priority.MEDIUM, nullable=False
+    )
     notification_metadata: Mapped[Optional[dict]] = mapped_column(JSON)
-    scheduled_for: Mapped[Optional[datetime]]
-    expires_at: Mapped[Optional[datetime]]
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     notification_type: Mapped["NotificationType"] = relationship(
         back_populates="notifications"
     )
     recipients: Mapped[List["NotificationRecipient"]] = relationship(
-        back_populates="notification"
+        back_populates="notification", cascade="all, delete-orphan"
     )
 
-    # Indexes
+    # Constraints
     __table_args__ = (
+        CheckConstraint(
+            "length(subject) >= 1", name="ck_notifications_subject_not_empty"
+        ),
+        CheckConstraint("length(body) >= 1", name="ck_notifications_body_not_empty"),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > created_at",
+            name="ck_notifications_expires_after_created",
+        ),
+        CheckConstraint(
+            "scheduled_for IS NULL OR scheduled_for >= created_at",
+            name="ck_notifications_scheduled_not_before_created",
+        ),
         Index("idx_notifications_entity_type", "entity_id", "notification_type_id"),
         Index("idx_notifications_created_at", "created_at"),
         Index("idx_notifications_scheduled_for", "scheduled_for"),
         Index("idx_notifications_expires_at", "expires_at"),
+        Index("idx_notifications_priority", "priority"),
+        Index("idx_notifications_actor", "actor_type", "actor_id"),
     )
 
 
-class NotificationRecipient(Base):
+class NotificationRecipient(Base, AuditMixin):
     __tablename__ = "notification_recipients"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     notification_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("notifications.id")
+        UUID(as_uuid=True),
+        ForeignKey("notifications.id", ondelete="CASCADE"),
+        nullable=False,
     )
     recipient_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id")
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
-    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    microsoft_teams_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    microsoft_teams_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    line_app_enabled: Mapped[bool] = mapped_column(
+        Boolean, default=False, nullable=False
+    )
     status: Mapped[NotificationStatus] = mapped_column(
-        Enum(NotificationStatus), default=NotificationStatus.PENDING
+        Enum(NotificationStatus), default=NotificationStatus.PENDING, nullable=False
     )
-    microsoft_teams_sent_at: Mapped[Optional[datetime]]
-    delivered_at: Mapped[Optional[datetime]]
-    read_at: Mapped[Optional[datetime]]
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    updated_at: Mapped[Optional[datetime]] = mapped_column(onupdate=func.now())
+    microsoft_teams_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    email_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    line_app_sent_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True)
+    )
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     notification: Mapped["Notification"] = relationship(back_populates="recipients")
     recipient: Mapped["User"] = relationship(back_populates="notification_recipients")
 
-    # Constraints and Indexes
+    # Constraints
     __table_args__ = (
-        UniqueConstraint("notification_id", "recipient_id"),
-        Index("idx_notification_recipients_status", "recipient_id", "status"),
+        UniqueConstraint(
+            "notification_id",
+            "recipient_id",
+            name="uq_notification_recipients_notification_recipient",
+        ),
+        CheckConstraint(
+            "delivered_at IS NULL OR delivered_at >= created_at",
+            name="ck_notification_recipients_delivered_after_created",
+        ),
+        CheckConstraint(
+            "read_at IS NULL OR read_at >= delivered_at",
+            name="ck_notification_recipients_read_after_delivered",
+        ),
+        Index("idx_notification_recipients_notification_id", "notification_id"),
+        Index("idx_notification_recipients_recipient_id", "recipient_id"),
+        Index("idx_notification_recipients_status", "status"),
         Index("idx_notification_recipients_status_created", "status", "created_at"),
+        Index("idx_notification_recipients_recipient_status", "recipient_id", "status"),
     )
 
 
-class DashboardStats(Base):
+class DashboardStats(Base, AuditMixin):
     __tablename__ = "dashboard_stats"
 
     id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=func.gen_random_uuid(),
     )
     requirement_schedule_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("program_requirement_schedules.id")
+        UUID(as_uuid=True),
+        ForeignKey("program_requirement_schedules.id", ondelete="CASCADE"),
+        nullable=False,
     )
     program_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("programs.id")
+        UUID(as_uuid=True),
+        ForeignKey("programs.id", ondelete="CASCADE"),
+        nullable=False,
     )
     academic_year_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("academic_years.id")
+        UUID(as_uuid=True),
+        ForeignKey("academic_years.id", ondelete="CASCADE"),
+        nullable=False,
     )
     cert_type_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("certificate_types.id")
+        UUID(as_uuid=True),
+        ForeignKey("certificate_types.id", ondelete="CASCADE"),
+        nullable=False,
     )
-    total_submissions_required: Mapped[int] = mapped_column(Integer, default=0)
-    submitted_count: Mapped[int] = mapped_column(Integer, default=0)
-    approved_count: Mapped[int] = mapped_column(Integer, default=0)
-    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
-    pending_count: Mapped[int] = mapped_column(Integer, default=0)
-    manual_review_count: Mapped[int] = mapped_column(Integer, default=0)
-    not_submitted_count: Mapped[int] = mapped_column(Integer, default=0)
-    on_time_submissions: Mapped[int] = mapped_column(Integer, default=0)
-    late_submissions: Mapped[int] = mapped_column(Integer, default=0)
-    overdue_count: Mapped[int] = mapped_column(Integer, default=0)
-    manual_verification_count: Mapped[int] = mapped_column(Integer, default=0)
-    agent_verification_count: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    total_submissions_required: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    submitted_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    approved_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    manual_review_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    not_submitted_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    on_time_submissions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    late_submissions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    overdue_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    manual_verification_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
+    agent_verification_count: Mapped[int] = mapped_column(
+        Integer, default=0, nullable=False
+    )
     last_calculated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
     )
 
     # Relationships
@@ -669,9 +1014,64 @@ class DashboardStats(Base):
         back_populates="dashboard_stats"
     )
 
-    # Constraints and Indexes
+    # Constraints
     __table_args__ = (
-        UniqueConstraint("requirement_schedule_id"),
+        UniqueConstraint(
+            "requirement_schedule_id", name="uq_dashboard_stats_requirement_schedule"
+        ),
+        CheckConstraint(
+            "total_submissions_required >= 0",
+            name="ck_dashboard_stats_total_required_non_negative",
+        ),
+        CheckConstraint(
+            "submitted_count >= 0", name="ck_dashboard_stats_submitted_non_negative"
+        ),
+        CheckConstraint(
+            "approved_count >= 0", name="ck_dashboard_stats_approved_non_negative"
+        ),
+        CheckConstraint(
+            "rejected_count >= 0", name="ck_dashboard_stats_rejected_non_negative"
+        ),
+        CheckConstraint(
+            "pending_count >= 0", name="ck_dashboard_stats_pending_non_negative"
+        ),
+        CheckConstraint(
+            "manual_review_count >= 0",
+            name="ck_dashboard_stats_manual_review_non_negative",
+        ),
+        CheckConstraint(
+            "not_submitted_count >= 0",
+            name="ck_dashboard_stats_not_submitted_non_negative",
+        ),
+        CheckConstraint(
+            "on_time_submissions >= 0", name="ck_dashboard_stats_on_time_non_negative"
+        ),
+        CheckConstraint(
+            "late_submissions >= 0", name="ck_dashboard_stats_late_non_negative"
+        ),
+        CheckConstraint(
+            "overdue_count >= 0", name="ck_dashboard_stats_overdue_non_negative"
+        ),
+        CheckConstraint(
+            "manual_verification_count >= 0",
+            name="ck_dashboard_stats_manual_verification_non_negative",
+        ),
+        CheckConstraint(
+            "agent_verification_count >= 0",
+            name="ck_dashboard_stats_agent_verification_non_negative",
+        ),
+        CheckConstraint(
+            "submitted_count = approved_count + rejected_count + pending_count + manual_review_count",
+            name="ck_dashboard_stats_submitted_count_consistency",
+        ),
+        CheckConstraint(
+            "total_submissions_required = submitted_count + not_submitted_count",
+            name="ck_dashboard_stats_total_count_consistency",
+        ),
+        CheckConstraint(
+            "submitted_count = on_time_submissions + late_submissions",
+            name="ck_dashboard_stats_timing_consistency",
+        ),
         Index("idx_dashboard_stats_requirement_schedule", "requirement_schedule_id"),
         Index("idx_dashboard_stats_program_id", "program_id"),
         Index("idx_dashboard_stats_academic_year_id", "academic_year_id"),
@@ -698,6 +1098,7 @@ class DashboardStats(Base):
         Index("idx_dashboard_stats_overdue_count", "overdue_count"),
         Index("idx_dashboard_stats_pending_count", "pending_count"),
         Index("idx_dashboard_stats_manual_review_count", "manual_review_count"),
+        # Covering index for common dashboard queries
         Index(
             "idx_dashboard_stats_summary_covering",
             "program_id",
