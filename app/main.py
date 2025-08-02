@@ -14,9 +14,9 @@ logger = get_logger()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    logger.info("Jubi Bot is starting up...")
+    logger.info("SIT Portal is starting up...")
     yield
-    logger.info("Jubi Bot is shutting down...")
+    logger.info("SIT Portal is shutting down...")
 
 
 def create_application() -> FastAPI:
@@ -52,7 +52,7 @@ app = create_application()
 @app.get("/health", tags=["Health"])
 async def health_check():
     """Health check endpoint to verify if the server is running."""
-    return {"status": "ok", "message": "Jubi Bot is running!"}
+    return {"status": "ok", "message": "SIT Portal is running!"}
 
 
 if __name__ == "__main__":

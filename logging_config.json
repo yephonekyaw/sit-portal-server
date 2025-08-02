@@ -1,11 +1,22 @@
 {
   "logger": {
     "log_dir": "logs",
-    "filename": "access.log",
+    "filename": "app.log",
     "level": "info",
-    "rotation": "7 days",
-    "retention": "7 days",
+    "rotation": "100 MB",
+    "retention": "30 days",
     "console_format": "<level>{level: <8}</level> <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> request id: {extra[request_id]} - <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
-    "file_format": "{level: <8} {time:YYYY-MM-DD HH:mm:ss.SSS} request id: {extra[request_id]} - {name}:{function}:{line} - {message}"
+    "file_format": "json",
+    "use_json_logs": true
+  },
+  "production": {
+    "log_dir": "/var/log/sit-portal",
+    "filename": "app.log", 
+    "level": "warning",
+    "rotation": "500 MB",
+    "retention": "90 days",
+    "console_format": "<level>{level: <8}</level> <green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> request id: {extra[request_id]} - <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+    "file_format": "json",
+    "use_json_logs": true
   }
 }

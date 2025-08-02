@@ -20,4 +20,13 @@ celery.conf.update(
     task_soft_time_limit=25 * 60,
     worker_prefetch_multiplier=1,
     worker_max_tasks_per_child=1000,
+    # Global retry settings
+    task_acks_late=True,
+    task_reject_on_worker_lost=True,
+    task_default_retry_delay=60,  # 60 seconds
+    task_max_retries=3,
+    # Exponential backoff settings
+    task_retry_backoff=True,
+    task_retry_backoff_max=700,  # Max 700 seconds
+    task_retry_jitter=False,
 )

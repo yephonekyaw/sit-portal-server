@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import (
@@ -7,7 +7,6 @@ from fastapi import (
     UploadFile,
     File,
     Form,
-    BackgroundTasks,
     Request,
 )
 from sqlalchemy import select
@@ -25,21 +24,15 @@ from app.services.minio_service import get_minio_service, MinIOService
 from app.utils.logging import get_logger
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.tasks.citi_cert_verification_task import verify_certificate_task
 
 logger = get_logger()
 submissions_router = APIRouter()
 
 
-async def process_submission_background_task(submission_id: UUID):
-    """Background task to process certificate submission - placeholder for future implementation"""
-    logger.info(f"Processing submission with ID: {submission_id}")
-    # TODO: Implement submission processing logic
-
-
 @submissions_router.post("/certificate")
 async def submit_certificate(
     request: Request,
-    background_tasks: BackgroundTasks,
     student_id: UUID = Form(..., description="Student ID"),
     cert_type_id: UUID = Form(..., description="Certificate type ID"),
     requirement_schedule_id: UUID = Form(
@@ -57,7 +50,7 @@ async def submit_certificate(
     2. Uploads file to MinIO storage
     3. Determines submission timing by comparing deadline with current time
     4. Saves submission data to database with default agent score of 0
-    5. Queues background task for processing
+    5. Queues Celery task for certificate verification processing
     6. Returns submission information
     """
     try:
@@ -97,14 +90,14 @@ async def submit_certificate(
 
         # Upload file to MinIO with certificate code as prefix
         upload_result = await minio_service.upload_file(
-            file=file, prefix=f"{cert_type.code}/", filename=file.filename
+            file=file, prefix=cert_type.code, filename=file.filename
         )
 
         if not upload_result["success"]:
             raise BusinessLogicError("Failed to upload file")
 
         # Determine submission timing
-        current_time = datetime.now()
+        current_time = datetime.now(timezone.utc)
         if current_time <= schedule.submission_deadline:
             timing = SubmissionTiming.ON_TIME
         else:
@@ -127,8 +120,8 @@ async def submit_certificate(
         await db_session.commit()
         await db_session.refresh(submission)
 
-        # Queue background task for processing
-        background_tasks.add_task(process_submission_background_task, submission.id)
+        # Queue Celery task for processing
+        verify_certificate_task.delay(request.state.request_id, str(submission.id))  # type: ignore
 
         # Prepare response data
         response_data = CertificateSubmissionResponse.model_validate(submission)

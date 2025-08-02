@@ -1,12 +1,27 @@
 import asyncio
 import re
 import sys
-from typing import Optional, Dict, Any
+from uuid import UUID
+from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.utils.logging import get_logger
 from app.config.settings import settings
 from app.services.minio_service import MinIOService
+from app.services.document_service import get_document_service
+from app.services.langchain_service import get_langchain_service
+from app.db.models import (
+    CertificateSubmission, 
+    CertificateType, 
+    Student, 
+    User, 
+    VerificationHistory,
+    SubmissionStatus,
+    VerificationType
+)
+from app.schemas.citi_template_schemas import CitiValidationResponse, ValidationDecision
 
 logger = get_logger()
 
@@ -162,6 +177,351 @@ class CitiProgramAutomationService:
         except Exception as e:
             logger.error(f"CITI automation failed: {e}")
             return {"success": False, "certificate_downloaded": False, "error": str(e)}
+
+    async def get_submission_data(
+        self, db_session: AsyncSession, submission_id: str
+    ) -> Optional[Dict[str, Any]]:
+        """Retrieve certificate submission data with related objects."""
+        try:
+            submission_stmt = (
+                select(CertificateSubmission, CertificateType, Student, User)
+                .join(
+                    CertificateType,
+                    CertificateSubmission.cert_type_id == CertificateType.id,
+                )
+                .join(Student, CertificateSubmission.student_id == Student.id)
+                .join(User, Student.user_id == User.id)
+                .where(CertificateSubmission.id == UUID(submission_id))
+            )
+
+            result = await db_session.execute(submission_stmt)
+            row = result.first()
+
+            if not row:
+                logger.warning(f"Submission not found", submission_id=submission_id)
+                return None
+
+            submission, cert_type, student, user = row
+            student_name = f"{user.first_name} {user.last_name}"
+
+            logger.info(f"Retrieved submission data", 
+                       submission_id=submission_id,
+                       student_name=student_name,
+                       cert_type=cert_type.code)
+
+            return {
+                "submission": submission,
+                "cert_type": cert_type,
+                "student": student,
+                "user": user,
+                "student_name": student_name,
+            }
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve submission data", 
+                        submission_id=submission_id, 
+                        error=str(e))
+            return None
+
+    async def process_document_extraction(
+        self, file_object_name: str, filename: str
+    ) -> Optional[Dict[str, Any]]:
+        """Extract text from a document stored in MinIO."""
+        try:
+            # Retrieve file from MinIO
+            file_result = await self.minio_service.get_file(file_object_name)
+            if not file_result["success"]:
+                logger.error("Failed to retrieve file from MinIO", 
+                           object_name=file_object_name)
+                return None
+
+            # Extract text from file
+            document_service = get_document_service()
+            extraction_result = await document_service.extract_text(
+                file_result["data"], filename
+            )
+
+            if not extraction_result["success"]:
+                logger.error("Text extraction failed", 
+                           filename=filename,
+                           object_name=file_object_name)
+                return None
+
+            logger.info("Document processing completed", 
+                       filename=filename,
+                       extraction_method=extraction_result.get("method"),
+                       confidence=extraction_result.get("confidence"))
+
+            return {
+                "file_data": file_result["data"],
+                "extraction_result": extraction_result,
+            }
+
+        except Exception as e:
+            logger.error("Document extraction failed", 
+                        filename=filename,
+                        object_name=file_object_name,
+                        error=str(e))
+            return None
+
+    async def perform_llm_verification(
+        self,
+        student_name: str,
+        submitted_extraction: Dict[str, Any],
+        verification_extraction: Dict[str, Any],
+        verification_template: str,
+    ) -> Optional[CitiValidationResponse]:
+        """Perform LLM-based certificate verification."""
+        try:
+            logger.info("Starting LLM verification", student_name=student_name)
+            
+            langchain_service = get_langchain_service()
+
+            # Prepare input variables for template
+            input_variables = [
+                "student_name",
+                "submitted_content",
+                "submitted_extraction_method",
+                "submitted_confidence",
+                "verification_content",
+                "verification_extraction_method",
+                "verification_confidence",
+            ]
+
+            # Format prompt
+            citi_validation_prompt = langchain_service.get_custom_prompt_template(
+                input_variables, verification_template
+            ).format(
+                student_name=student_name,
+                submitted_content=submitted_extraction["text"],
+                submitted_extraction_method=submitted_extraction.get("method", "unknown"),
+                submitted_confidence=submitted_extraction.get("confidence", 0),
+                verification_content=verification_extraction["text"],
+                verification_extraction_method=verification_extraction.get("method", "unknown"),
+                verification_confidence=verification_extraction.get("confidence", 0),
+            )
+
+            # Get LLM response
+            llm_chat = langchain_service.get_gemini_chat_model()
+            llm_response = cast(
+                CitiValidationResponse,
+                llm_chat.with_structured_output(schema=CitiValidationResponse).invoke(
+                    citi_validation_prompt
+                ),
+            )
+
+            logger.info("LLM verification completed", 
+                       student_name=student_name,
+                       decision=llm_response.validation_decision,
+                       confidence=llm_response.confidence_level,
+                       score=llm_response.overall_score.value)
+
+            return llm_response
+
+        except Exception as e:
+            logger.error("LLM verification failed", 
+                        student_name=student_name,
+                        error=str(e))
+            return None
+
+    def _map_validation_decision_to_status(self, decision: ValidationDecision) -> SubmissionStatus:
+        """Map LLM validation decision to database submission status."""
+        mapping = {
+            ValidationDecision.APPROVE: SubmissionStatus.APPROVED,
+            ValidationDecision.REJECT: SubmissionStatus.REJECTED,
+            ValidationDecision.MANUAL_REVIEW: SubmissionStatus.MANUAL_REVIEW,
+        }
+        return mapping.get(decision, SubmissionStatus.MANUAL_REVIEW)
+
+    def _get_verification_comments_and_reasons(self, llm_response: CitiValidationResponse) -> tuple[Optional[str], Optional[str]]:
+        """Extract comments and reasons from LLM response based on decision."""
+        if llm_response.validation_decision == ValidationDecision.REJECT:
+            return (
+                llm_response.final_assessment.reasons_for_rejection,
+                llm_response.final_assessment.reasons_for_rejection,
+            )
+        elif llm_response.validation_decision == ValidationDecision.MANUAL_REVIEW:
+            return (
+                llm_response.final_assessment.reasons_for_manual_review,
+                llm_response.final_assessment.reasons_for_manual_review,
+            )
+        else:
+            # For APPROVE, use general comments if available
+            return (llm_response.final_assessment.comments, None)
+
+    async def save_verification_results(
+        self,
+        db_session: AsyncSession,
+        submission: CertificateSubmission,
+        llm_response: CitiValidationResponse,
+    ) -> bool:
+        """Save verification results to database."""
+        try:
+            # Map validation decision to submission status
+            new_status = self._map_validation_decision_to_status(llm_response.validation_decision)
+            old_status = submission.submission_status
+
+            # Update submission
+            submission.submission_status = new_status
+            submission.agent_confidence_score = llm_response.overall_score.value / 100.0  # Convert to 0-1 range
+
+            # Get comments and reasons for verification history
+            comments, reasons = self._get_verification_comments_and_reasons(llm_response)
+
+            # Create verification history record
+            verification_history = VerificationHistory(
+                submission_id=submission.id,
+                verifier_id=None,  # No human verifier for agent verification
+                verification_type=VerificationType.AGENT,
+                old_status=old_status,
+                new_status=new_status,
+                comments=comments,
+                reasons=reasons,
+                agent_analysis_result=llm_response.model_dump(),
+            )
+
+            # Add to session and commit
+            db_session.add(verification_history)
+            await db_session.commit()
+
+            logger.info("Verification results saved to database", 
+                       submission_id=str(submission.id),
+                       old_status=old_status.value,
+                       new_status=new_status.value,
+                       confidence_score=submission.agent_confidence_score)
+            return True
+
+        except Exception as e:
+            logger.error("Failed to save verification results", 
+                        submission_id=str(submission.id),
+                        error=str(e))
+            await db_session.rollback()
+            return False
+
+    async def verify_certificate_submission(
+        self, db_session: AsyncSession, request_id: str, submission_id: str
+    ) -> Dict[str, Any]:
+        """
+        Main method to verify a certificate submission end-to-end.
+        
+        Args:
+            db_session: Database session
+            request_id: Request ID for logging
+            submission_id: UUID of the certificate submission
+            
+        Returns:
+            Dictionary with verification results
+        """
+        try:
+            logger.info("Starting certificate verification workflow", 
+                       submission_id=submission_id, 
+                       request_id=request_id)
+
+            # Step 1: Get submission data
+            submission_data = await self.get_submission_data(db_session, submission_id)
+            if not submission_data:
+                return {"success": False, "error": "Certificate submission not found"}
+
+            submission = submission_data["submission"]
+            cert_type = submission_data["cert_type"]
+            student_name = submission_data["student_name"]
+
+            # Step 2: Extract text from submitted certificate
+            submitted_doc_result = await self.process_document_extraction(
+                submission.file_object_name, submission.filename
+            )
+            if not submitted_doc_result:
+                return {"success": False, "error": "Failed to process submitted certificate"}
+
+            submitted_extraction = submitted_doc_result["extraction_result"]
+
+            # Check for verification URL
+            verification_url = submitted_extraction.get("verification_url")
+            if not verification_url:
+                logger.warning("No verification URL found in certificate", 
+                             submission_id=submission_id,
+                             student_name=student_name)
+                return {"success": False, "error": "No verification URL found in submitted certificate"}
+
+            logger.info("Verification URL found", 
+                       submission_id=submission_id,
+                       verification_url=verification_url)
+
+            # Step 3: Download verification certificate
+            download_result = await self.download_certificate(
+                url=verification_url,
+                filename=submission.filename,
+                prefix="citi-automated-docs",
+            )
+
+            if not download_result or not download_result["success"]:
+                logger.error("Failed to download verification certificate", 
+                           submission_id=submission_id,
+                           verification_url=verification_url)
+                return {"success": False, "error": "Failed to download verification certificate"}
+
+            verification_object_name = download_result["minio_upload"]["object_name"]
+
+            # Step 4: Extract text from verification certificate
+            verification_doc_result = await self.process_document_extraction(
+                verification_object_name, submission.filename
+            )
+            if not verification_doc_result:
+                return {"success": False, "error": "Failed to process verification certificate"}
+
+            verification_extraction = verification_doc_result["extraction_result"]
+
+            # Step 5: Perform LLM verification
+            llm_response = await self.perform_llm_verification(
+                student_name=student_name,
+                submitted_extraction=submitted_extraction,
+                verification_extraction=verification_extraction,
+                verification_template=cert_type.verification_template,
+            )
+
+            if not llm_response:
+                return {"success": False, "error": "LLM verification failed"}
+
+            # Step 6: Save results to database
+            save_success = await self.save_verification_results(
+                db_session, submission, llm_response
+            )
+
+            if not save_success:
+                return {"success": False, "error": "Failed to save verification results"}
+
+            logger.info("Certificate verification workflow completed", 
+                       submission_id=submission_id,
+                       student_name=student_name,
+                       decision=llm_response.validation_decision,
+                       confidence=llm_response.confidence_level,
+                       score=llm_response.overall_score.value)
+
+            return {
+                "success": True,
+                "submission_id": submission_id,
+                "request_id": request_id,
+                "student_name": student_name,
+                "validation_decision": llm_response.validation_decision,
+                "confidence_level": llm_response.confidence_level,
+                "overall_score": llm_response.overall_score.value,
+                "verification_url": verification_url,
+                "submitted_extraction_method": submitted_extraction.get("method"),
+                "verification_extraction_method": verification_extraction.get("method"),
+            }
+
+        except Exception as e:
+            logger.error("Certificate verification workflow failed", 
+                        submission_id=submission_id,
+                        request_id=request_id,
+                        error=str(e),
+                        exc_info=True)
+            return {
+                "success": False,
+                "error": str(e),
+                "submission_id": submission_id,
+                "request_id": request_id,
+            }
 
 
 def get_citi_automation_service() -> CitiProgramAutomationService:

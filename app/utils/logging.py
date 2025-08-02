@@ -1,11 +1,15 @@
 import logging
 import sys
+import os
 from pathlib import Path
 from loguru import logger
 import json
 from datetime import date
+from typing import Dict, Any
 
 from app.utils.context import get_request_id
+
+
 
 
 class InterceptHandler(logging.Handler):
@@ -37,9 +41,9 @@ class InterceptHandler(logging.Handler):
 
 class CustomizeLogger:
     @classmethod
-    def make_logger(cls, config_path: Path):
+    def make_logger(cls, config_path: Path, environment: str = "logger"):
         config = cls.load_logging_config(config_path)
-        logging_config = config.get("logger")
+        logging_config = config.get(environment, config.get("logger"))
 
         return cls.customize_logging(
             log_dir=logging_config.get("log_dir"),
@@ -49,6 +53,7 @@ class CustomizeLogger:
             retention=logging_config.get("retention"),
             console_format=logging_config.get("console_format"),
             file_format=logging_config.get("file_format"),
+            use_json_logs=logging_config.get("use_json_logs", False),
         )
 
     @classmethod
@@ -61,6 +66,7 @@ class CustomizeLogger:
         retention: str,
         console_format: str,
         file_format: str,
+        use_json_logs: bool = False,
     ):
         logger.remove()
 
@@ -75,16 +81,28 @@ class CustomizeLogger:
         )
 
         # File logger without colors
-        logger.add(
-            str(f"{log_dir}/{filename}"),
-            rotation=rotation,
-            retention=retention,
-            enqueue=True,
-            backtrace=True,
-            level=level.upper(),
-            format=file_format,
-            colorize=False,
-        )
+        if use_json_logs and file_format == "json":
+            logger.add(
+                str(f"{log_dir}/{filename}"),
+                rotation=rotation,
+                retention=retention,
+                enqueue=True,
+                backtrace=True,
+                level=level.upper(),
+                serialize=True,
+                colorize=False,
+            )
+        else:
+            logger.add(
+                str(f"{log_dir}/{filename}"),
+                rotation=rotation,
+                retention=retention,
+                enqueue=True,
+                backtrace=True,
+                level=level.upper(),
+                format=file_format,
+                colorize=False,
+            )
 
         # Redirect standard logging to loguru
         cls._setup_intercept_handlers()
@@ -108,7 +126,12 @@ class CustomizeLogger:
 
 # Initialize logger
 config_path = Path("../").with_name("logging_config.json")
-custom_logger = CustomizeLogger.make_logger(config_path)
+environment = (
+    "production"
+    if os.getenv("ENVIRONMENT", "development") == "production"
+    else "logger"
+)
+custom_logger = CustomizeLogger.make_logger(config_path, environment)
 
 
 def get_logger():
