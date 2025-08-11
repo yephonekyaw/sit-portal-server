@@ -65,9 +65,7 @@ class Priority(enum.Enum):
 
 class ChannelType(enum.Enum):
     IN_APP = "in_app"
-    MICROSOFT_TEAMS = "microsoft_teams"
     LINE_APP = "line_app"
-    EMAIL = "email"  # Added common notification channel
 
 
 class TemplateFormat(enum.Enum):
@@ -88,7 +86,7 @@ class NotificationStatus(enum.Enum):
 class ProgReqRecurrenceType(enum.Enum):
     ONCE = "once"
     ANNUAL = "annual"
-    SEMESTER = "semester"  # Added for more flexibility
+    SEMESTER = "semester"
 
 
 class SubmissionTiming(enum.Enum):
