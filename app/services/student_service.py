@@ -14,7 +14,7 @@ from app.db.models import (
     UserType,
     EnrollmentStatus,
 )
-from app.schemas.staff.staff_schemas import ParsedStudentRecord
+from app.schemas.staff.student_data_schemas import ParsedStudentRecord
 
 
 class StudentService:

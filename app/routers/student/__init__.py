@@ -6,5 +6,9 @@ from .profile import profile_router
 student_router = APIRouter()
 
 # Include sub-routers
-student_router.include_router(submissions_router, prefix="/submissions", tags=["Student Submissions"])
-student_router.include_router(profile_router, prefix="/profile", tags=["Student Profile"])
+student_router.include_router(
+    submissions_router, prefix="/submissions", tags=["Student - Submissions"]
+)
+student_router.include_router(
+    profile_router, prefix="/profile", tags=["Student - Profile"]
+)

@@ -80,19 +80,6 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
    - **Forgery Evidence**: Clear signs of document tampering or modification
    - **Institution Mismatch**: Different institutions between submitted and verification certificates
 
-**STUDENT INFORMATION:**
-- Student Name: {student_name}
-
-**SUBMITTED CERTIFICATE (File 1):**
-- Extraction Method: {submitted_extraction_method}
-- Confidence Level: {submitted_confidence}%
-- Content: {submitted_content}
-
-**VERIFICATION CERTIFICATE (File 2):**
-- Extraction Method: {verification_extraction_method}
-- Confidence Level: {verification_confidence}%
-- Content: {verification_content}
-
 **IMPORTANT VALIDATION NOTES:**
 - The verification certificate will have a different "Generated on" date than the submitted certificate - this is normal and expected
 - Focus on matching the core certification information, not formatting differences
@@ -103,4 +90,20 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
 - Look for the exact phrase "This is to certify that:" followed by the student name
 
 **VALIDATION TASK:**
-Analyze both certificates according to the above criteria and provide your validation decision with detailed reasoning. Focus on the decision criteria and be explicit about which conditions led to your **APPROVE**/**MANUAL REVIEW**/**REJECT** decision."""
+Analyze both certificates according to the above criteria and provide your validation decision with detailed reasoning. Focus on the decision criteria and be explicit about which conditions led to your **APPROVE**/**MANUAL REVIEW**/**REJECT** decision.
+
+**REQUIRED DATA INPUT:**
+
+1. STUDENT INFORMATION
+   - Name: {student_name}
+
+2. SUBMITTED CERTIFICATE (File 1)
+   - Extraction Method: {submitted_extraction_method}
+   - Confidence Level: {submitted_confidence}%
+   - Content: {submitted_content}
+
+3. VERIFICATION CERTIFICATE (File 2)
+   - Extraction Method: {verification_extraction_method}
+   - Confidence Level: {verification_confidence}%
+   - Content: {verification_content}
+"""

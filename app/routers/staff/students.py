@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.session import get_async_session
-from app.schemas.staff.staff_schemas import (
+from app.schemas.staff.student_data_schemas import (
     ImportStudentsRequest,
     ImportStudentsResponse,
 )

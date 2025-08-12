@@ -50,7 +50,9 @@ class NotificationService:
     ) -> None:
         """Create notification recipients for given user IDs."""
         # Get all valid users in one query
-        users_result = await self.db.execute(select(User).where(User.id.in_(recipient_ids)))
+        users_result = await self.db.execute(
+            select(User).where(User.id.in_(recipient_ids))
+        )
         users = {user.id: user for user in users_result.scalars().all()}
 
         # Create recipients
@@ -120,9 +122,7 @@ class NotificationService:
                 NotificationRecipient.notification_id == notification_id,
                 NotificationRecipient.recipient_id == user_id,
             )
-            .values(
-                status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
-            )
+            .values(status=NotificationStatus.READ, read_at=datetime.now(timezone.utc))
         )
         await self.db.commit()
         return result.rowcount > 0
@@ -138,9 +138,6 @@ class NotificationService:
             "status": NotificationStatus.DELIVERED,
             "delivered_at": datetime.now(timezone.utc),
         }
-
-        if channel_type == ChannelType.MICROSOFT_TEAMS:
-            update_values["microsoft_teams_sent_at"] = datetime.now(timezone.utc)
 
         result = await self.db.execute(
             update(NotificationRecipient)
@@ -176,9 +173,7 @@ class NotificationService:
                 NotificationRecipient.recipient_id == user_id,
                 NotificationRecipient.status == NotificationStatus.DELIVERED,
             )
-            .values(
-                status=NotificationStatus.READ, read_at=datetime.now(timezone.utc)
-            )
+            .values(status=NotificationStatus.READ, read_at=datetime.now(timezone.utc))
         )
         await self.db.commit()
         return result.rowcount

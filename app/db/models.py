@@ -1,5 +1,5 @@
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, date
 from sqlalchemy import (
     String,
     Boolean,
@@ -14,6 +14,7 @@ from sqlalchemy import (
     UniqueConstraint,
     CheckConstraint,
     DateTime,
+    Date,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
@@ -86,13 +87,20 @@ class NotificationStatus(enum.Enum):
 class ProgReqRecurrenceType(enum.Enum):
     ONCE = "once"
     ANNUAL = "annual"
-    SEMESTER = "semester"
 
 
 class SubmissionTiming(enum.Enum):
     ON_TIME = "on_time"
     LATE = "late"
     OVERDUE = "overdue"
+
+
+class ScheduleCreationTrigger(enum.Enum):
+    AUTOMATIC = "automatic"  # Create automatically based on recurrence type
+    CUSTOM_DATE = "custom_date"  # Create on specific month/day every year
+    RELATIVE_TO_TARGET_YEAR = (
+        "relative_to_target_year"  # Create X months before target year
+    )
 
 
 # Base model with common audit fields
@@ -102,7 +110,7 @@ class AuditMixin:
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    updated_at: Mapped[Optional[datetime]] = mapped_column(
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), onupdate=func.now()
     )
 
@@ -142,14 +150,6 @@ class User(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint(
-            "length(first_name) >= 1", name="ck_users_first_name_not_empty"
-        ),
-        CheckConstraint("length(last_name) >= 1", name="ck_users_last_name_not_empty"),
-        CheckConstraint(
-            "email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
-            name="ck_users_email_format",
-        ),
         Index("idx_users_email", "email"),
         Index("idx_users_type_active", "user_type", "is_active"),
         Index("idx_users_last_login", "last_login"),
@@ -198,13 +198,6 @@ class Student(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint(
-            "length(roll_number) >= 1", name="ck_students_roll_number_not_empty"
-        ),
-        CheckConstraint(
-            "sit_email ~* '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$'",
-            name="ck_students_sit_email_format",
-        ),
         Index("idx_students_user_id", "user_id"),
         Index("idx_students_program_id", "program_id"),
         Index("idx_students_academic_year_id", "academic_year_id"),
@@ -244,12 +237,6 @@ class Staff(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint(
-            "length(employee_id) >= 1", name="ck_staff_employee_id_not_empty"
-        ),
-        CheckConstraint(
-            "length(department) >= 1", name="ck_staff_department_not_empty"
-        ),
         Index("idx_staff_user_id", "user_id"),
         Index("idx_staff_employee_id", "employee_id"),
         Index("idx_staff_department", "department"),
@@ -274,10 +261,7 @@ class Role(Base, AuditMixin):
     )
 
     # Constraints
-    __table_args__ = (
-        CheckConstraint("length(name) >= 1", name="ck_roles_name_not_empty"),
-        Index("idx_roles_name", "name"),
-    )
+    __table_args__ = (Index("idx_roles_name", "name"),)
 
 
 class Permission(Base, AuditMixin):
@@ -393,8 +377,6 @@ class Program(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint("length(program_code) >= 1", name="ck_programs_code_not_empty"),
-        CheckConstraint("length(program_name) >= 1", name="ck_programs_name_not_empty"),
         CheckConstraint("duration_years > 0", name="ck_programs_duration_positive"),
         Index("idx_programs_code", "program_code"),
         Index("idx_programs_is_active", "is_active"),
@@ -422,8 +404,8 @@ class ProgramRequirement(Base, AuditMixin):
     )
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     target_year: Mapped[int] = mapped_column(Integer, nullable=False)
-    deadline_month: Mapped[int] = mapped_column(Integer, nullable=False)
-    deadline_day: Mapped[int] = mapped_column(Integer, nullable=False)
+    deadline_date: Mapped[date] = mapped_column(Date, nullable=False)
+    grace_period_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     special_instruction: Mapped[Optional[str]] = mapped_column(Text)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -432,9 +414,23 @@ class ProgramRequirement(Base, AuditMixin):
         default=ProgReqRecurrenceType.ANNUAL,
         nullable=False,
     )
-    last_recurred_at: Mapped[datetime] = mapped_column(
+    last_recurrence_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    notification_days_before_deadline: Mapped[int] = mapped_column(
+        Integer, default=90, nullable=False
+    )
+    effective_from_year: Mapped[Optional[str]] = mapped_column(String(10))
+    effective_until_year: Mapped[Optional[str]] = mapped_column(
+        String(10)
+    )  # Up to this academic year
+    schedule_creation_trigger: Mapped[ScheduleCreationTrigger] = mapped_column(
+        Enum(ScheduleCreationTrigger),
+        default=ScheduleCreationTrigger.AUTOMATIC,
+        nullable=False,
+    )
+    custom_trigger_date: Mapped[Optional[date]] = mapped_column(Date)
+    months_before_target_year: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Relationships
     program: Mapped["Program"] = relationship(back_populates="program_requirements")
@@ -457,18 +453,29 @@ class ProgramRequirement(Base, AuditMixin):
             "target_year >= 1", name="ck_program_requirements_target_year_positive"
         ),
         CheckConstraint(
-            "deadline_month >= 1 AND deadline_month <= 12",
-            name="ck_program_requirements_deadline_month_valid",
-        ),
-        CheckConstraint(
-            "deadline_day >= 1 AND deadline_day <= 31",
-            name="ck_program_requirements_deadline_day_valid",
+            "EXTRACT(YEAR FROM deadline_date) = 2000",
+            name="ck_program_requirements_deadline_year_2000",
         ),
         Index("idx_program_requirements_program_id", "program_id"),
         Index("idx_program_requirements_cert_type_id", "cert_type_id"),
-        Index("idx_program_requirements_target_year", "target_year"),
-        Index("idx_program_requirements_is_active", "is_active"),
         Index("idx_program_requirements_program_active", "program_id", "is_active"),
+        Index("idx_program_requirements_trigger", "schedule_creation_trigger"),
+        CheckConstraint(
+            """
+            (schedule_creation_trigger = 'CUSTOM_DATE' AND custom_trigger_date IS NOT NULL) OR
+            (schedule_creation_trigger = 'RELATIVE_TO_TARGET_YEAR' AND months_before_target_year IS NOT NULL) OR
+            (schedule_creation_trigger NOT IN ('CUSTOM_DATE', 'RELATIVE_TO_TARGET_YEAR'))
+            """,
+            name="ck_program_requirements_trigger_data_consistency",
+        ),
+        CheckConstraint(
+            "custom_trigger_date IS NULL OR EXTRACT(YEAR FROM custom_trigger_date) = 2000",
+            name="ck_program_requirements_custom_trigger_year_2000",
+        ),
+        CheckConstraint(
+            "months_before_target_year IS NULL OR months_before_target_year >= 0",
+            name="ck_program_requirements_months_before_non_negative",
+        ),
     )
 
 
@@ -495,6 +502,9 @@ class ProgramRequirementSchedule(Base, AuditMixin):
     )
     submission_deadline: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
+    )
+    last_notified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # Relationships
@@ -591,12 +601,6 @@ class CertificateType(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        CheckConstraint(
-            "length(code) >= 1", name="ck_certificate_types_code_not_empty"
-        ),
-        CheckConstraint(
-            "length(name) >= 1", name="ck_certificate_types_name_not_empty"
-        ),
         Index("idx_certificate_types_code", "code"),
         Index("idx_certificate_types_is_active", "is_active"),
     )
@@ -761,16 +765,6 @@ class NotificationType(Base, AuditMixin):
         UniqueConstraint(
             "entity_type", "code", name="uq_notification_types_entity_code"
         ),
-        CheckConstraint(
-            "length(code) >= 1", name="ck_notification_types_code_not_empty"
-        ),
-        CheckConstraint(
-            "length(name) >= 1", name="ck_notification_types_name_not_empty"
-        ),
-        CheckConstraint(
-            "length(entity_type) >= 1",
-            name="ck_notification_types_entity_type_not_empty",
-        ),
         Index("idx_notification_types_code", "code"),
         Index("idx_notification_types_entity_type", "entity_type"),
         Index("idx_notification_types_is_active", "is_active"),
@@ -810,10 +804,6 @@ class NotificationChannelTemplate(Base, AuditMixin):
             "notification_type_id",
             "channel_type",
             name="uq_notification_channel_templates_type_channel",
-        ),
-        CheckConstraint(
-            "length(template_body) >= 1",
-            name="ck_notification_channel_templates_body_not_empty",
         ),
         Index(
             "idx_notification_channel_templates_notification_type",
@@ -861,10 +851,6 @@ class Notification(Base, AuditMixin):
     # Constraints
     __table_args__ = (
         CheckConstraint(
-            "length(subject) >= 1", name="ck_notifications_subject_not_empty"
-        ),
-        CheckConstraint("length(body) >= 1", name="ck_notifications_body_not_empty"),
-        CheckConstraint(
             "expires_at IS NULL OR expires_at > created_at",
             name="ck_notifications_expires_after_created",
         ),
@@ -899,20 +885,12 @@ class NotificationRecipient(Base, AuditMixin):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    microsoft_teams_enabled: Mapped[bool] = mapped_column(
-        Boolean, default=False, nullable=False
-    )
-    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     line_app_enabled: Mapped[bool] = mapped_column(
         Boolean, default=False, nullable=False
     )
     status: Mapped[NotificationStatus] = mapped_column(
         Enum(NotificationStatus), default=NotificationStatus.PENDING, nullable=False
     )
-    microsoft_teams_sent_at: Mapped[Optional[datetime]] = mapped_column(
-        DateTime(timezone=True)
-    )
-    email_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     line_app_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True)
     )
@@ -1016,47 +994,6 @@ class DashboardStats(Base, AuditMixin):
     __table_args__ = (
         UniqueConstraint(
             "requirement_schedule_id", name="uq_dashboard_stats_requirement_schedule"
-        ),
-        CheckConstraint(
-            "total_submissions_required >= 0",
-            name="ck_dashboard_stats_total_required_non_negative",
-        ),
-        CheckConstraint(
-            "submitted_count >= 0", name="ck_dashboard_stats_submitted_non_negative"
-        ),
-        CheckConstraint(
-            "approved_count >= 0", name="ck_dashboard_stats_approved_non_negative"
-        ),
-        CheckConstraint(
-            "rejected_count >= 0", name="ck_dashboard_stats_rejected_non_negative"
-        ),
-        CheckConstraint(
-            "pending_count >= 0", name="ck_dashboard_stats_pending_non_negative"
-        ),
-        CheckConstraint(
-            "manual_review_count >= 0",
-            name="ck_dashboard_stats_manual_review_non_negative",
-        ),
-        CheckConstraint(
-            "not_submitted_count >= 0",
-            name="ck_dashboard_stats_not_submitted_non_negative",
-        ),
-        CheckConstraint(
-            "on_time_submissions >= 0", name="ck_dashboard_stats_on_time_non_negative"
-        ),
-        CheckConstraint(
-            "late_submissions >= 0", name="ck_dashboard_stats_late_non_negative"
-        ),
-        CheckConstraint(
-            "overdue_count >= 0", name="ck_dashboard_stats_overdue_non_negative"
-        ),
-        CheckConstraint(
-            "manual_verification_count >= 0",
-            name="ck_dashboard_stats_manual_verification_non_negative",
-        ),
-        CheckConstraint(
-            "agent_verification_count >= 0",
-            name="ck_dashboard_stats_agent_verification_non_negative",
         ),
         CheckConstraint(
             "submitted_count = approved_count + rejected_count + pending_count + manual_review_count",
