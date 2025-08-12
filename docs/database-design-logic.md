@@ -45,9 +45,7 @@ CertificateTypes   AcademicYears        Students
   * `is_active`: Whether this requirement is still in effect
   * `recurrence_type`: How often schedules are created (ANNUAL, ONCE)
   * `last_recurrence_at`: Timestamp of when schedules were last generated for this requirement
-  * `schedule_creation_trigger`: When to create schedules (AUTOMATIC, CUSTOM_DATE, RELATIVE_TO_TARGET_YEAR)
-  * `custom_trigger_date`: For CUSTOM_DATE trigger (e.g., 2000-03-15 for March 15)
-  * `months_before_target_year`: For RELATIVE_TO_TARGET_YEAR trigger
+  * `months_before_deadline`: Months before deadline to create schedules for cron jobs
   * `effective_from_year/effective_until_year`: When this requirement is valid (academic year format)
 
 **EXAMPLE REQUIREMENT:**
@@ -61,10 +59,10 @@ CertificateTypes   AcademicYears        Students
 - Is Mandatory: true
 - Special Instruction: "Complete all modules including the refresher course"
 - Recurrence: ANNUAL
-- Schedule Creation Trigger: AUTOMATIC
+- Months Before Deadline: 6 (create schedules 6 months before deadline)
 - Effective From: "2023-2024" (starts applying from this academic year)
 
-This means: *"Every CS Bachelor student must submit a CITI certificate by August 15th of their 3rd year, with notifications starting 90 days before deadline and a 7-day grace period. Schedules are created automatically, effective from academic year 2023-2024 onwards."*
+This means: *"Every CS Bachelor student must submit a CITI certificate by August 15th of their 3rd year, with notifications starting 90 days before deadline and a 7-day grace period. Schedules are created 6 months before the deadline via cron jobs, effective from academic year 2023-2024 onwards."*
 
 ### 4. PROGRAM_REQUIREMENT_SCHEDULES TABLE (The Timeline Implementation)
 - Creates specific deadlines for each academic year cohort
@@ -107,38 +105,30 @@ For students who started in 2025 (Academic Year 2025-2026):
 - Future schedule generations use the new deadline
 - Existing schedules remain unchanged (grandfathering)
 
-### 4. FLEXIBLE AUTOMATED SCHEDULE CREATION
-- Multiple trigger mechanisms support different timing needs:
-  * **AUTOMATIC**: Traditional approach - cron job runs at start of academic year based on recurrence_type
-  * **CUSTOM_DATE**: Schedules created on specific calendar dates (e.g., March 15th every year)
-  * **RELATIVE_TO_TARGET_YEAR**: Schedules created X months before students enter target year
-- Scans all active requirements with appropriate trigger configurations
+### 4. CRON-BASED AUTOMATED SCHEDULE CREATION
+- Cron jobs use `months_before_deadline` to determine when to create new requirement schedules
+- Scans all active requirements and creates schedules at the appropriate time
 - Calculates deadline based on: `(academic_year + target_year + deadline_date)`
+- Uses `months_before_deadline` to determine optimal schedule creation timing
 
 ## Automation Logic Examples
 
-### Example 1: Automatic Trigger
-**On August 1st, 2025, cron job finds:**
+### Example 1: Cron Job Schedule Creation
+**Cron job running daily finds:**
 - Requirement: CS-BACHELOR needs CITI in year 3, deadline date(2000, 8, 15)
-- Trigger: AUTOMATIC
+- months_before_deadline: 6
 - New academic year: 2025-2026 (students starting now)
 - Calculation: 2025 + 3 years = 2028, so deadline = August 15, 2028
+- Creates schedule 6 months before deadline (February 15, 2028)
 - Creates schedule: ProgramRequirementSchedule linking to 2025-2026 academic year
 - Sets last_notified_at to null (notifications haven't started yet)
 
-### Example 2: Custom Date Trigger
-**On March 15th (every year), cron job finds:**
-- Requirement: CS-BACHELOR needs ETHICS cert, custom_trigger_date = date(2000, 3, 15)
-- Trigger: CUSTOM_DATE
-- Creates schedules for current academic year cohorts
-- Useful for mid-year requirement additions or special timing needs
-
-### Example 3: Relative to Target Year Trigger
-**6 months before target year starts:**
-- Requirement: CS-BACHELOR needs SAFETY cert, months_before_target_year = 6
-- Trigger: RELATIVE_TO_TARGET_YEAR
-- If students enter year 2 in August 2026, schedules created in February 2026
-- Gives students advance notice and preparation time
+### Example 2: Different Timing Requirements
+**For requirements with different timing needs:**
+- Requirement: CS-BACHELOR needs ETHICS cert, months_before_deadline = 3
+- Creates schedules 3 months before the actual deadline
+- Useful for requirements that need less advance notice
+- Allows flexible timing based on requirement complexity
 
 ## Benefits of This Design
 
@@ -149,7 +139,7 @@ For students who started in 2025 (Academic Year 2025-2026):
 ✅ Easy to track compliance across different cohorts  
 ✅ Flexible enough to handle requirement changes over time  
 ✅ Supports different deadline patterns (annual, semester-based, one-time)  
-✅ Multiple schedule creation triggers for different timing needs  
+✅ Flexible cron-based schedule creation timing  
 ✅ Effective date ranges for requirement lifecycle management  
 ✅ Unified date format reduces field complexity  
 ✅ Database-enforced date validation with year 2000 convention  
@@ -180,11 +170,9 @@ ProgramRequirementSchedules (1) → (Many) CertificateSubmissions
 ### Field Design Decisions
 - **Date Fields**: Using PostgreSQL Date type with year 2000 as dummy year for month/day storage
   * `deadline_date = date(2000, 8, 15)` represents August 15th (any year)
-  * `custom_trigger_date = date(2000, 3, 10)` represents March 10th (any year)
   * Database constraints ensure year 2000 is always used
-- **Trigger Flexibility**: `schedule_creation_trigger` enum supports different timing patterns
+- **Cron Timing**: `months_before_deadline` determines when cron jobs create new schedules
 - **Lifecycle Management**: `effective_from_year` and `effective_until_year` handle requirement changes over time
-- **Automation Control**: `auto_create_schedules` allows manual override of automation
 
 ### Technical Implementation
 - The `recurrence_type` field allows for different automation patterns
@@ -192,37 +180,35 @@ ProgramRequirementSchedules (1) → (Many) CertificateSubmissions
 - Using `is_active = False` instead of deletion preserves historical data
 - The design supports multiple requirements per program and multiple programs per certificate type
 - Academic years provide the temporal framework for calculating specific deadlines
-- Database constraints ensure data consistency for trigger-specific fields
+- Database constraints ensure data consistency for cron timing fields
 
 ### Code Usage Examples
 ```python
 from datetime import date
 
-# Create requirement with automatic trigger
+# Create requirement with cron-based schedule creation
 requirement = ProgramRequirement(
     name="3rd Year CITI Certification",
     deadline_date=date(2000, 8, 15),  # August 15th
     grace_period_days=7,
     notification_days_before_deadline=90,
-    schedule_creation_trigger=ScheduleCreationTrigger.AUTOMATIC,
+    months_before_deadline=6,  # Create schedules 6 months before deadline
     recurrence_type=ProgReqRecurrenceType.ANNUAL
 )
 
-# Create requirement with custom date trigger  
+# Create requirement with different timing
 requirement = ProgramRequirement(
     name="Ethics Training Certificate",
     deadline_date=date(2000, 12, 1),   # December 1st deadline
-    schedule_creation_trigger=ScheduleCreationTrigger.CUSTOM_DATE,
-    custom_trigger_date=date(2000, 3, 15),  # Create schedules March 15th
+    months_before_deadline=3,  # Create schedules 3 months before deadline
     notification_days_before_deadline=60
 )
 
-# Create requirement with relative timing
+# Create requirement with longer lead time
 requirement = ProgramRequirement(
     name="Lab Safety Certification",
     deadline_date=date(2000, 9, 30),   # September 30th deadline
-    schedule_creation_trigger=ScheduleCreationTrigger.RELATIVE_TO_TARGET_YEAR,
-    months_before_target_year=6,  # Create schedules 6 months before target year
+    months_before_deadline=12,  # Create schedules 1 year before deadline
     effective_from_year="2024-2025"
 )
 

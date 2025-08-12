@@ -1,29 +1,97 @@
-from datetime import date
+from typing import Annotated
+import uuid
 
-from fastapi import APIRouter, Depends, Request, status, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Request, status, Path
 
-from app.db.session import get_async_session
-from app.db.models import (
-    ProgramRequirement,
-    Program,
-    CertificateType,
-    ScheduleCreationTrigger,
+from app.services.program_requirement_service import (
+    ProgramRequirementServiceProvider,
+    get_program_requirement_service,
 )
 from app.schemas.staff.program_requirement_schemas import (
     CreateProgramRequirementRequest,
-    ProgramRequirementResponse,
+    UpdateProgramRequirementRequest,
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
-from app.utils.logging import get_logger
 
-logger = get_logger()
 program_requirements_router = APIRouter()
 
 
+def handle_service_error(request: Request, error: Exception):
+    """Handle service errors and return appropriate error response"""
+    error_message = str(error)
+
+    # Handle specific validation errors with detailed messages
+    if error_message.startswith("TARGET_YEAR_EXCEEDS_PROGRAM_DURATION:"):
+        details = error_message.split(": ", 1)[1]
+        return ResponseBuilder.error(
+            request=request,
+            message=details,
+            error_code="TARGET_YEAR_EXCEEDS_PROGRAM_DURATION",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if error_message.startswith("EFFECTIVE_FROM_YEAR_TOO_EARLY:"):
+        details = error_message.split(": ", 1)[1]
+        return ResponseBuilder.error(
+            request=request,
+            message=details,
+            error_code="EFFECTIVE_FROM_YEAR_TOO_EARLY",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    if error_message.startswith("EFFECTIVE_UNTIL_YEAR_TOO_LATE:"):
+        details = error_message.split(": ", 1)[1]
+        return ResponseBuilder.error(
+            request=request,
+            message=details,
+            error_code="EFFECTIVE_UNTIL_YEAR_TOO_LATE",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
+    # For standard error codes, map to appropriate status codes
+    error_status_mapping = {
+        "PROGRAM_REQUIREMENT_NOT_FOUND": status.HTTP_404_NOT_FOUND,
+        "PROGRAM_NOT_FOUND": status.HTTP_400_BAD_REQUEST,
+        "PROGRAM_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
+        "CERTIFICATE_TYPE_NOT_FOUND": status.HTTP_400_BAD_REQUEST,
+        "CERTIFICATE_TYPE_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
+        "REQUIREMENT_ALREADY_EXISTS": status.HTTP_409_CONFLICT,
+        "DATABASE_CONSTRAINT_VIOLATION": status.HTTP_400_BAD_REQUEST,
+        "PROGRAM_REQUIREMENT_ALREADY_ARCHIVED": status.HTTP_400_BAD_REQUEST,
+    }
+
+    status_code = error_status_mapping.get(
+        error_message, status.HTTP_500_INTERNAL_SERVER_ERROR
+    )
+
+    # Map error codes to user-friendly messages
+    error_messages = {
+        "PROGRAM_REQUIREMENT_NOT_FOUND": "Program requirement not found",
+        "PROGRAM_NOT_FOUND": "Program not found",
+        "PROGRAM_NOT_ACTIVE": "Cannot create requirement for inactive program",
+        "CERTIFICATE_TYPE_NOT_FOUND": "Certificate type not found",
+        "CERTIFICATE_TYPE_NOT_ACTIVE": "Cannot create requirement for inactive certificate type",
+        "REQUIREMENT_ALREADY_EXISTS": "A requirement with similar constraints already exists",
+        "DATABASE_CONSTRAINT_VIOLATION": "Database constraint violation",
+        "PROGRAM_REQUIREMENT_ALREADY_ARCHIVED": "Program requirement is already archived",
+        "PROGRAM_REQUIREMENT_CREATION_FAILED": "Failed to create program requirement",
+        "PROGRAM_REQUIREMENT_UPDATE_FAILED": "Failed to update program requirement",
+        "PROGRAM_REQUIREMENT_ARCHIVE_FAILED": "Failed to archive program requirement",
+        "PROGRAM_REQUIREMENT_RETRIEVAL_FAILED": "Failed to retrieve program requirement details",
+    }
+
+    message = error_messages.get(error_message, "An unexpected error occurred")
+
+    return ResponseBuilder.error(
+        request=request,
+        message=message,
+        error_code=error_message,
+        status_code=status_code,
+    )
+
+
+# API Endpoints
 @program_requirements_router.post(
     "/",
     response_model=None,
@@ -34,105 +102,13 @@ program_requirements_router = APIRouter()
 async def create_program_requirement(
     request: Request,
     requirement_data: CreateProgramRequirementRequest,
-    db: AsyncSession = Depends(get_async_session),
+    requirement_service: ProgramRequirementServiceProvider = Depends(
+        get_program_requirement_service
+    ),
 ):
     """Create a new program requirement with validation"""
     try:
-        # Validate that program exists and get duration for validation
-        program_result = await db.execute(
-            select(Program).where(Program.id == requirement_data.program_id)
-        )
-        program = program_result.scalar_one_or_none()
-        if not program:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST, detail="Program not found"
-            )
-
-        if not program.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot create requirement for inactive program",
-            )
-
-        # Validate target_year against program duration
-        if requirement_data.target_year > program.duration_years:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Target year ({requirement_data.target_year}) cannot exceed program duration ({program.duration_years} years)",
-            )
-
-        # Validate that certificate type exists and is active
-        cert_type_result = await db.execute(
-            select(CertificateType).where(
-                CertificateType.id == requirement_data.cert_type_id
-            )
-        )
-        cert_type = cert_type_result.scalar_one_or_none()
-        if not cert_type:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Certificate type not found",
-            )
-
-        if not cert_type.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Cannot create requirement for inactive certificate type",
-            )
-
-        # Create deadline date (using year 2000 as base as specified)
-        deadline_date = date(
-            2000, requirement_data.deadline_month, requirement_data.deadline_day
-        )
-
-        # Create custom trigger date if provided
-        custom_trigger_date = None
-        if (
-            requirement_data.schedule_creation_trigger
-            == ScheduleCreationTrigger.CUSTOM_DATE
-            and requirement_data.custom_trigger_month is not None
-            and requirement_data.custom_trigger_day is not None
-        ):
-            custom_trigger_date = date(
-                2000,
-                requirement_data.custom_trigger_month,
-                requirement_data.custom_trigger_day,
-            )
-
-        # Create the program requirement
-        new_requirement = ProgramRequirement(
-            program_id=requirement_data.program_id,
-            cert_type_id=requirement_data.cert_type_id,
-            name=requirement_data.name,
-            target_year=requirement_data.target_year,
-            deadline_date=deadline_date,
-            grace_period_days=requirement_data.grace_period_days or 7,
-            notification_days_before_deadline=requirement_data.notification_days_before_deadline or 90,
-            is_mandatory=requirement_data.is_mandatory,
-            is_active=requirement_data.is_active,
-            special_instruction=requirement_data.special_instruction,
-            recurrence_type=requirement_data.recurrence_type,
-            effective_from_year=requirement_data.effective_from_year,
-            effective_until_year=requirement_data.effective_until_year,
-            schedule_creation_trigger=requirement_data.schedule_creation_trigger,
-            custom_trigger_date=custom_trigger_date,
-            months_before_target_year=requirement_data.months_before_target_year,
-        )
-
-        db.add(new_requirement)
-        await db.commit()
-        await db.refresh(new_requirement)
-
-        logger.info(
-            f"Created program requirement: {new_requirement.name} for program {program.program_code}"
-        )
-
-        # Create minimal response data
-        response_data = {
-            "id": str(new_requirement.id),
-            "name": new_requirement.name,
-            "target_year": new_requirement.target_year,
-        }
+        response_data = await requirement_service.create_requirement(requirement_data)
 
         return ResponseBuilder.success(
             request=request,
@@ -141,33 +117,123 @@ async def create_program_requirement(
             status_code=status.HTTP_201_CREATED,
         )
 
-    except HTTPException:
-        # Re-raise HTTP exceptions as-is
-        raise
-    except IntegrityError as e:
-        await db.rollback()
-        logger.warning(f"Integrity error creating program requirement: {str(e)}")
-
-        # Check for specific constraint violations
-        error_msg = str(e.orig).lower()
-        if "unique" in error_msg:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="A requirement with similar constraints already exists",
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Database constraint violation",
-            )
-    except ValueError as e:
-        await db.rollback()
-        logger.warning(f"Validation error creating program requirement: {str(e)}")
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    except Exception as e:
-        await db.rollback()
-        logger.error(f"Failed to create program requirement: {str(e)}", exc_info=True)
+    except (ValueError, RuntimeError) as e:
+        return handle_service_error(request, e)
+    except Exception:
         raise BusinessLogicError(
             message="Failed to create program requirement",
             error_code="PROGRAM_REQUIREMENT_CREATION_FAILED",
+        )
+
+
+@program_requirements_router.patch(
+    "/{requirement_id}/archive",
+    response_model=None,
+    status_code=status.HTTP_200_OK,
+    summary="Archive a program requirement",
+    description="Archive a specific program requirement and update effective_until_year based on the latest academic year with created schedules",
+)
+async def archive_program_requirement(
+    request: Request,
+    requirement_id: Annotated[
+        uuid.UUID, Path(description="Program requirement ID to archive")
+    ],
+    requirement_service: ProgramRequirementServiceProvider = Depends(
+        get_program_requirement_service
+    ),
+):
+    """Archive a program requirement with proper effective_until_year handling"""
+    try:
+        response_data = await requirement_service.archive_requirement(requirement_id)
+
+        return ResponseBuilder.success(
+            request=request,
+            data=response_data,
+            message="Program requirement archived successfully",
+            status_code=status.HTTP_200_OK,
+        )
+
+    except (ValueError, RuntimeError) as e:
+        return handle_service_error(request, e)
+    except Exception:
+        raise BusinessLogicError(
+            message="Failed to archive program requirement",
+            error_code="PROGRAM_REQUIREMENT_ARCHIVE_FAILED",
+        )
+
+
+@program_requirements_router.put(
+    "/{requirement_id}",
+    response_model=None,
+    status_code=status.HTTP_200_OK,
+    summary="Update an existing program requirement",
+    description="Update an existing program requirement with validation. Changes apply only to future schedules (schedules with deadlines not yet passed).",
+)
+async def update_program_requirement(
+    request: Request,
+    requirement_id: Annotated[
+        uuid.UUID, Path(description="Program requirement ID to update")
+    ],
+    requirement_data: UpdateProgramRequirementRequest,
+    requirement_service: ProgramRequirementServiceProvider = Depends(
+        get_program_requirement_service
+    ),
+):
+    """Update an existing program requirement with validation"""
+    try:
+        response_data = await requirement_service.update_requirement(
+            requirement_id, requirement_data
+        )
+
+        return ResponseBuilder.success(
+            request=request,
+            data=response_data,
+            message="Program requirement updated successfully. Changes will apply to future schedules only.",
+            status_code=status.HTTP_200_OK,
+        )
+
+    except (ValueError, RuntimeError) as e:
+        return handle_service_error(request, e)
+    except Exception:
+        raise BusinessLogicError(
+            message="Failed to update program requirement",
+            error_code="PROGRAM_REQUIREMENT_UPDATE_FAILED",
+        )
+
+
+@program_requirements_router.get(
+    "/{requirement_id}",
+    response_model=None,
+    status_code=status.HTTP_200_OK,
+    summary="Get program requirement details",
+    description="Retrieve comprehensive program requirement information including related program and certificate data, plus schedule statistics",
+)
+async def get_program_requirement_details(
+    request: Request,
+    requirement_id: Annotated[
+        uuid.UUID, Path(description="Program requirement ID to retrieve")
+    ],
+    requirement_service: ProgramRequirementServiceProvider = Depends(
+        get_program_requirement_service
+    ),
+):
+    """Get comprehensive program requirement details with related data"""
+    try:
+        response_data = await requirement_service.get_requirement_details(
+            requirement_id
+        )
+
+        return ResponseBuilder.success(
+            request=request,
+            data=response_data,
+            message="Program requirement details retrieved successfully",
+            status_code=status.HTTP_200_OK,
+        )
+
+    except (ValueError, RuntimeError) as e:
+        return handle_service_error(request, e)
+    except Exception:
+        raise BusinessLogicError(
+            message="Failed to retrieve program requirement details",
+            error_code="PROGRAM_REQUIREMENT_RETRIEVAL_FAILED",
         )

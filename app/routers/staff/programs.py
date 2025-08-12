@@ -28,6 +28,16 @@ def handle_service_error(request: Request, error: Exception):
             error_code="DURATION_CONFLICTS_WITH_REQUIREMENTS",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
+    
+    # Handle program with active requirements (special case)
+    if error_message.startswith("PROGRAM_HAS_ACTIVE_REQUIREMENTS:"):
+        requirement_details = error_message.split(": ", 1)[1]
+        return ResponseBuilder.error(
+            request=request,
+            message=f"Cannot archive program. {requirement_details}. Please archive these requirements individually first.",
+            error_code="PROGRAM_HAS_ACTIVE_REQUIREMENTS",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
 
     # For standard error codes, map to appropriate status codes
     error_status_mapping = {

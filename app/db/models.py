@@ -95,14 +95,6 @@ class SubmissionTiming(enum.Enum):
     OVERDUE = "overdue"
 
 
-class ScheduleCreationTrigger(enum.Enum):
-    AUTOMATIC = "automatic"  # Create automatically based on recurrence type
-    CUSTOM_DATE = "custom_date"  # Create on specific month/day every year
-    RELATIVE_TO_TARGET_YEAR = (
-        "relative_to_target_year"  # Create X months before target year
-    )
-
-
 # Base model with common audit fields
 class AuditMixin:
     """Mixin for common audit fields"""
@@ -424,13 +416,7 @@ class ProgramRequirement(Base, AuditMixin):
     effective_until_year: Mapped[Optional[str]] = mapped_column(
         String(10)
     )  # Up to this academic year
-    schedule_creation_trigger: Mapped[ScheduleCreationTrigger] = mapped_column(
-        Enum(ScheduleCreationTrigger),
-        default=ScheduleCreationTrigger.AUTOMATIC,
-        nullable=False,
-    )
-    custom_trigger_date: Mapped[Optional[date]] = mapped_column(Date)
-    months_before_target_year: Mapped[Optional[int]] = mapped_column(Integer)
+    months_before_deadline: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Relationships
     program: Mapped["Program"] = relationship(back_populates="program_requirements")
@@ -459,22 +445,9 @@ class ProgramRequirement(Base, AuditMixin):
         Index("idx_program_requirements_program_id", "program_id"),
         Index("idx_program_requirements_cert_type_id", "cert_type_id"),
         Index("idx_program_requirements_program_active", "program_id", "is_active"),
-        Index("idx_program_requirements_trigger", "schedule_creation_trigger"),
         CheckConstraint(
-            """
-            (schedule_creation_trigger = 'CUSTOM_DATE' AND custom_trigger_date IS NOT NULL) OR
-            (schedule_creation_trigger = 'RELATIVE_TO_TARGET_YEAR' AND months_before_target_year IS NOT NULL) OR
-            (schedule_creation_trigger NOT IN ('CUSTOM_DATE', 'RELATIVE_TO_TARGET_YEAR'))
-            """,
-            name="ck_program_requirements_trigger_data_consistency",
-        ),
-        CheckConstraint(
-            "custom_trigger_date IS NULL OR EXTRACT(YEAR FROM custom_trigger_date) = 2000",
-            name="ck_program_requirements_custom_trigger_year_2000",
-        ),
-        CheckConstraint(
-            "months_before_target_year IS NULL OR months_before_target_year >= 0",
-            name="ck_program_requirements_months_before_non_negative",
+            "months_before_deadline IS NULL OR (months_before_deadline >= 1 AND months_before_deadline <= 6)",
+            name="ck_program_requirements_months_before_deadline_range",
         ),
     )
 
@@ -501,6 +474,12 @@ class ProgramRequirementSchedule(Base, AuditMixin):
         nullable=False,
     )
     submission_deadline: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    grace_period_deadline: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    start_notify_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )
     last_notified_at: Mapped[datetime] = mapped_column(

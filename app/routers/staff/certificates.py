@@ -15,6 +15,16 @@ def handle_service_error(request: Request, error: Exception):
     """Handle service errors and return appropriate error response"""
     error_message = str(error)
 
+    # Handle certificate with active requirements (special case)
+    if error_message.startswith("CERTIFICATE_TYPE_HAS_ACTIVE_REQUIREMENTS:"):
+        requirement_details = error_message.split(": ", 1)[1]
+        return ResponseBuilder.error(
+            request=request,
+            message=f"Cannot archive certificate type. {requirement_details}. Please archive these requirements individually first.",
+            error_code="CERTIFICATE_TYPE_HAS_ACTIVE_REQUIREMENTS",
+            status_code=status.HTTP_400_BAD_REQUEST,
+        )
+
     # For standard error codes, map to appropriate status codes
     error_status_mapping = {
         "CERTIFICATE_TYPE_NOT_FOUND": status.HTTP_404_NOT_FOUND,

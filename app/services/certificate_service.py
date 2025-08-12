@@ -24,7 +24,9 @@ class CertificateServiceProvider:
         self.db = db_session
 
     # Core CRUD Operations
-    async def get_certificate_by_id(self, certificate_id: uuid.UUID) -> Optional[CertificateType]:
+    async def get_certificate_by_id(
+        self, certificate_id: uuid.UUID
+    ) -> Optional[CertificateType]:
         """Get certificate by ID or return None if not found"""
         result = await self.db.execute(
             select(CertificateType).where(CertificateType.id == certificate_id)
@@ -88,14 +90,16 @@ class CertificateServiceProvider:
 
         # Check if another certificate already has this code (excluding current certificate)
         if certificate_data.code != certificate.code:
-            if await self.check_certificate_code_exists(certificate_data.code, exclude_id=certificate_id):
+            if await self.check_certificate_code_exists(
+                certificate_data.code, exclude_id=certificate_id
+            ):
                 raise ValueError("CERTIFICATE_CODE_EXISTS")
 
         try:
             # Preserve REQUIRED_DATA_INPUT section in verification template
             updated_template = self._preserve_required_data_input_section(
                 certificate_data.verification_template,
-                certificate.verification_template
+                certificate.verification_template,
             )
 
             # Update certificate fields
@@ -121,12 +125,13 @@ class CertificateServiceProvider:
         except Exception as e:
             await self.db.rollback()
             logger.error(
-                f"Failed to update certificate {certificate_id}: {str(e)}", exc_info=True
+                f"Failed to update certificate {certificate_id}: {str(e)}",
+                exc_info=True,
             )
             raise RuntimeError("CERTIFICATE_TYPE_UPDATE_FAILED")
 
     async def archive_certificate(self, certificate_id: uuid.UUID) -> Dict[str, Any]:
-        """Archive a certificate and all its active requirements"""
+        """Archive a certificate only if it has no active requirements"""
         # Check if certificate exists
         certificate = await self.get_certificate_by_id(certificate_id)
         if not certificate:
@@ -137,18 +142,30 @@ class CertificateServiceProvider:
             raise ValueError("CERTIFICATE_TYPE_ALREADY_ARCHIVED")
 
         try:
-            # Get all active requirements for this certificate
-            active_requirements_count = await self._archive_certificate_requirements(certificate_id)
+            # Check if certificate has any active requirements
+            active_requirements_result = await self.db.execute(
+                select(func.count(ProgramRequirement.id)).where(
+                    and_(
+                        ProgramRequirement.cert_type_id == certificate_id,
+                        ProgramRequirement.is_active.is_(True),
+                    )
+                )
+            )
+            active_requirements_count = active_requirements_result.scalar()
 
-            # Archive the certificate
+            # Prevent archiving if there are active requirements
+            if active_requirements_count is not None and active_requirements_count > 0:
+                raise ValueError(
+                    f"CERTIFICATE_TYPE_HAS_ACTIVE_REQUIREMENTS: {active_requirements_count} active requirement{'s' if active_requirements_count != 1 else ''} must be archived first"
+                )
+
+            # Archive the certificate (no requirements to archive)
             certificate.is_active = False
 
             await self.db.commit()
             await self.db.refresh(certificate)
 
-            logger.info(
-                f"Archived certificate {certificate.code} with {active_requirements_count} requirements"
-            )
+            logger.info(f"Archived certificate {certificate.code}")
 
             return {
                 "certificate": {
@@ -156,13 +173,14 @@ class CertificateServiceProvider:
                     "code": certificate.code,
                     "name": certificate.name,
                 },
-                "archived_requirements_count": active_requirements_count,
+                "archived_requirements_count": 0,
             }
 
         except Exception as e:
             await self.db.rollback()
             logger.error(
-                f"Failed to archive certificate {certificate_id}: {str(e)}", exc_info=True
+                f"Failed to archive certificate {certificate_id}: {str(e)}",
+                exc_info=True,
             )
             raise RuntimeError("CERTIFICATE_TYPE_ARCHIVE_FAILED")
 
@@ -224,42 +242,29 @@ class CertificateServiceProvider:
                 ),
             )
             .outerjoin(
-                active_req_subquery, CertificateType.id == active_req_subquery.c.cert_type_id
+                active_req_subquery,
+                CertificateType.id == active_req_subquery.c.cert_type_id,
             )
             .outerjoin(
-                archived_req_subquery, CertificateType.id == archived_req_subquery.c.cert_type_id
+                archived_req_subquery,
+                CertificateType.id == archived_req_subquery.c.cert_type_id,
             )
             .outerjoin(
-                submissions_subquery, CertificateType.id == submissions_subquery.c.cert_type_id
+                submissions_subquery,
+                CertificateType.id == submissions_subquery.c.cert_type_id,
             )
             .order_by(CertificateType.created_at.asc())
         )
 
-    async def _archive_certificate_requirements(self, certificate_id: uuid.UUID) -> int:
-        """Archive all active requirements for a certificate and return count"""
-        active_requirements_result = await self.db.execute(
-            select(ProgramRequirement).where(
-                and_(
-                    ProgramRequirement.cert_type_id == certificate_id,
-                    ProgramRequirement.is_active.is_(True),
-                )
-            )
-        )
-        requirements_to_archive = active_requirements_result.scalars().all()
-
-        # Archive all active requirements
-        for requirement in requirements_to_archive:
-            requirement.is_active = False
-
-        return len(requirements_to_archive)
-
-    def _preserve_required_data_input_section(self, new_template: str, current_template: str) -> str:
+    def _preserve_required_data_input_section(
+        self, new_template: str, current_template: str
+    ) -> str:
         """
         Preserve the REQUIRED_DATA_INPUT section from the current template
         and combine it with the updated template content.
         """
         required_data_marker = "**REQUIRED_DATA_INPUT:**"
-        
+
         if required_data_marker in current_template:
             # Extract the REQUIRED_DATA_INPUT section from current template
             current_parts = current_template.split(required_data_marker, 1)
@@ -267,24 +272,21 @@ class CertificateServiceProvider:
         else:
             # If no REQUIRED_DATA_INPUT section exists, return new template as-is
             return new_template
-        
+
         # Remove any REQUIRED_DATA_INPUT section from the new template
         if required_data_marker in new_template:
             new_parts = new_template.split(required_data_marker, 1)
             new_template_without_required_data = new_parts[0].rstrip()
         else:
             new_template_without_required_data = new_template.rstrip()
-        
+
         # Combine the new template with the preserved REQUIRED_DATA_INPUT section
         return new_template_without_required_data + "\n\n" + required_data_section
 
     @staticmethod
     def build_archive_message(archived_requirements_count: int) -> str:
         """Build archive success message with requirement count"""
-        message = "Certificate type archived successfully"
-        if archived_requirements_count > 0:
-            message += f" along with {archived_requirements_count} requirement{'s' if archived_requirements_count != 1 else ''}"
-        return message
+        return "Certificate type archived successfully"
 
 
 # Dependency injection for service provider

@@ -133,7 +133,7 @@ class ProgramServiceProvider:
             raise RuntimeError("PROGRAM_UPDATE_FAILED")
 
     async def archive_program(self, program_id: uuid.UUID) -> Dict[str, Any]:
-        """Archive a program and all its active requirements"""
+        """Archive a program only if it has no active requirements"""
         # Check if program exists
         program = await self.get_program_by_id(program_id)
         if not program:
@@ -144,35 +144,34 @@ class ProgramServiceProvider:
             raise ValueError("PROGRAM_ALREADY_ARCHIVED")
 
         try:
-            # Get all active requirements for this program
+            # Check if program has any active requirements
             active_requirements_result = await self.db.execute(
-                select(ProgramRequirement).where(
+                select(func.count(ProgramRequirement.id)).where(
                     and_(
                         ProgramRequirement.program_id == program_id,
                         ProgramRequirement.is_active.is_(True),
                     )
                 )
             )
-            requirements_to_archive = active_requirements_result.scalars().all()
-            archived_requirements_count = len(requirements_to_archive)
+            active_requirements_count = active_requirements_result.scalar()
 
-            # Archive all active requirements first
-            for requirement in requirements_to_archive:
-                requirement.is_active = False
+            # Prevent archiving if there are active requirements
+            if active_requirements_count > 0:
+                raise ValueError(
+                    f"PROGRAM_HAS_ACTIVE_REQUIREMENTS: {active_requirements_count} active requirement{'s' if active_requirements_count != 1 else ''} must be archived first"
+                )
 
-            # Archive the program
+            # Archive the program (no requirements to archive)
             program.is_active = False
 
             await self.db.commit()
             await self.db.refresh(program)
 
-            logger.info(
-                f"Archived program {program.program_code} with {archived_requirements_count} requirements"
-            )
+            logger.info(f"Archived program {program.program_code}")
 
             return {
                 "program": self._create_program_response(program),
-                "archived_requirements_count": archived_requirements_count,
+                "archived_requirements_count": 0,
             }
 
         except Exception as e:
@@ -345,10 +344,7 @@ class ProgramServiceProvider:
     @staticmethod
     def build_archive_message(archived_requirements_count: int) -> str:
         """Build archive success message with requirement count"""
-        message = "Program archived successfully"
-        if archived_requirements_count > 0:
-            message += f" along with {archived_requirements_count} requirement{'s' if archived_requirements_count != 1 else ''}"
-        return message
+        return "Program archived successfully"
 
 
 # Dependency injection for service provider
