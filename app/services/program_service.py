@@ -156,7 +156,7 @@ class ProgramServiceProvider:
             active_requirements_count = active_requirements_result.scalar()
 
             # Prevent archiving if there are active requirements
-            if active_requirements_count > 0:
+            if active_requirements_count is not None and active_requirements_count > 0:
                 raise ValueError(
                     f"PROGRAM_HAS_ACTIVE_REQUIREMENTS: {active_requirements_count} active requirement{'s' if active_requirements_count != 1 else ''} must be archived first"
                 )

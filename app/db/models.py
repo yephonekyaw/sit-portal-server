@@ -810,8 +810,6 @@ class Notification(Base, AuditMixin):
     entity_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
     actor_type: Mapped[ActorType] = mapped_column(Enum(ActorType), nullable=False)
     actor_id: Mapped[Optional[uuid.UUID]] = mapped_column(UUID(as_uuid=True))
-    subject: Mapped[str] = mapped_column(String(500), nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
     priority: Mapped[Priority] = mapped_column(
         Enum(Priority), default=Priority.MEDIUM, nullable=False
     )
