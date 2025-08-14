@@ -1,43 +1,43 @@
-from .base import BaseNotificationService
-from .registry import NotificationServiceRegistry, notification_service
-from .utils import get_notification_message, create_notification_simple, get_notification_message_by_code, create_notification_simple_by_code, get_user_notifications_summary
-from .user_notifications import UserNotificationService, get_user_notification_service
+"""
+Simplified notification service package
 
-# Import all notification services to trigger registration
-from .certificate_submission_notification_service import (
-    CertificateSubmissionSubmitNotificationService,
-    CertificateSubmissionUpdateNotificationService,
-    CertificateSubmissionDeleteNotificationService,
-    CertificateSubmissionVerifyNotificationService,
-    CertificateSubmissionRejectNotificationService,
-    CertificateSubmissionRequestNotificationService,
+Usage:
+    from app.services.notifications import create_notification, get_notification_message
+    
+    # Create a notification
+    notification_id = await create_notification(
+        notification_code="certificate_submission_submit",
+        entity_id=submission_id,
+        actor_type="user",
+        recipient_ids=[user_id],
+        db_session=db
+    )
+    
+    # Get formatted message
+    message = await get_notification_message(
+        notification_code="certificate_submission_submit",
+        entity_id=submission_id,
+        channel_type="in_app",
+        db_session=db
+    )
+"""
+
+from .utils import (
+    create_notification,
+    get_notification_message, 
+    get_user_notifications_summary
 )
-from .program_requirement_schedule_notification_service import (
-    ProgramRequirementScheduleOverdueNotificationService,
-    ProgramRequirementScheduleWarnNotificationService,
-    ProgramRequirementScheduleRemindNotificationService,
-)
+from .user_notifications import UserNotificationService
+from .registry import NotificationServiceRegistry
+from .base import BaseNotificationService
+from .deadline_utils import DeadlineCalculator
 
 __all__ = [
-    "BaseNotificationService", 
-    "NotificationServiceRegistry", 
-    "notification_service",
-    "get_notification_message",
-    "get_notification_message_by_code", 
-    "create_notification_simple",
-    "create_notification_simple_by_code",
+    "create_notification",
+    "get_notification_message", 
     "get_user_notifications_summary",
     "UserNotificationService",
-    "get_user_notification_service",
-    # Certificate submission services
-    "CertificateSubmissionSubmitNotificationService",
-    "CertificateSubmissionUpdateNotificationService", 
-    "CertificateSubmissionDeleteNotificationService",
-    "CertificateSubmissionVerifyNotificationService",
-    "CertificateSubmissionRejectNotificationService",
-    "CertificateSubmissionRequestNotificationService",
-    # Program requirement schedule services
-    "ProgramRequirementScheduleOverdueNotificationService",
-    "ProgramRequirementScheduleWarnNotificationService", 
-    "ProgramRequirementScheduleRemindNotificationService",
+    "NotificationServiceRegistry",
+    "BaseNotificationService",
+    "DeadlineCalculator"
 ]

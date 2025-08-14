@@ -4,73 +4,62 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, insert
 
-from app.db.models import NotificationType, NotificationChannelTemplate, ChannelType
+from app.db.models import (
+    NotificationType,
+    NotificationChannelTemplate,
+    ChannelType,
+    Notification,
+    NotificationRecipient,
+    ActorType,
+    NotificationStatus,
+)
 from app.utils.logging import get_logger
 
 logger = get_logger()
 
 
 class BaseNotificationService(ABC):
-    """Base notification service with common functionality for all notification types"""
+    """Simplified base notification service"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: AsyncSession, notification_code: str):
         self.db = db_session
-        self._notification_type_id: Optional[uuid.UUID] = None
-        self._priority: Optional[str] = None
+        self.notification_code = notification_code
+        self._notification_type: Optional[NotificationType] = None
 
-    async def _fetch_notification_type(self) -> NotificationType:
-        """Fetch notification type from database using notification code"""
-        if not hasattr(self, "_cached_notification_type"):
+    async def _get_notification_type(self) -> NotificationType:
+        """Get notification type from database"""
+        if self._notification_type is None:
             result = await self.db.execute(
                 select(NotificationType).where(
                     NotificationType.code == self.notification_code
                 )
             )
-            notification_type = result.scalar_one_or_none()
-            if not notification_type:
+            self._notification_type = result.scalar_one_or_none()
+            if not self._notification_type:
                 raise ValueError(
-                    f"Notification type not found for code: {self.notification_code}"
+                    f"Notification type not found: {self.notification_code}"
                 )
-            self._cached_notification_type = notification_type
-        return self._cached_notification_type
-
-    @property
-    @abstractmethod
-    def notification_code(self) -> str:
-        """Each sub class must define its notification code"""
-        pass
+        return self._notification_type
 
     @abstractmethod
     async def get_notification_data(self, entity_id: uuid.UUID) -> Dict[str, Any]:
-        """
-        Retrieve all data needed to create notification templates for this notification type
-        Each sub class implements this with entity-specific logic
-        """
+        """Get data for notification templates - implemented by subclasses"""
         pass
 
     async def construct_message(
         self, channel_type: str, notification_data: Dict[str, Any]
     ) -> Dict[str, str]:
-        """
-        Construct the subject and body using templates from NotificationChannelTemplate table
-        Returns dict with 'subject' and 'body' keys
-        """
+        """Build message from template and data"""
         try:
-            # Get notification type to access templates
-            notification_type = await self._fetch_notification_type()
+            notification_type = await self._get_notification_type()
 
-            # Convert string channel_type to enum
             try:
                 channel_enum = ChannelType(channel_type.lower())
             except ValueError:
-                logger.warning(
-                    f"Invalid channel type: {channel_type}, defaulting to IN_APP"
-                )
                 channel_enum = ChannelType.IN_APP
 
-            # Fetch the template for this notification type and channel
             template_result = await self.db.execute(
                 select(NotificationChannelTemplate).where(
                     NotificationChannelTemplate.notification_type_id
@@ -82,59 +71,32 @@ class BaseNotificationService(ABC):
             template = template_result.scalar_one_or_none()
 
             if not template:
-                # Fallback if no template found
-                logger.warning(
-                    f"No template found for notification {self.notification_code} "
-                    f"and channel {channel_type}"
-                )
                 return {
-                    "subject": f"{notification_type.name}",
-                    "body": f"You have a new {notification_type.name.lower()} notification.",
+                    "subject": notification_type.name,
+                    "body": f"New {notification_type.name.lower()} notification",
                 }
 
-            # Format the template with notification data
             try:
-                formatted_subject = (
+                subject = (
                     template.template_subject.format(**notification_data)
                     if template.template_subject
                     else notification_type.name
                 )
-                formatted_body = template.template_body.format(**notification_data)
-
-                return {"subject": formatted_subject, "body": formatted_body}
+                body = template.template_body.format(**notification_data)
+                return {"subject": subject, "body": body}
 
             except KeyError as e:
                 logger.error(
-                    f"Template formatting error for {self.notification_code}: "
-                    f"Missing placeholder {str(e)} in notification_data"
+                    f"Template error for {self.notification_code}: missing {e}"
                 )
-                # Return template with unformatted placeholders as fallback
                 return {
                     "subject": template.template_subject or notification_type.name,
                     "body": template.template_body,
                 }
 
         except Exception as e:
-            logger.error(
-                f"Failed to construct message for {self.notification_code}: {str(e)}",
-                exc_info=True,
-            )
-            # Final fallback
-            return {"subject": "Notification", "body": "You have a new notification."}
-
-    async def get_notification_type_id(self) -> uuid.UUID:
-        """Get notification type ID from database"""
-        if self._notification_type_id is None:
-            notification_type = await self._fetch_notification_type()
-            self._notification_type_id = notification_type.id
-        return self._notification_type_id
-
-    async def get_priority(self) -> str:
-        """Get priority from database"""
-        if self._priority is None:
-            notification_type = await self._fetch_notification_type()
-            self._priority = notification_type.default_priority.value
-        return self._priority
+            logger.error(f"Message construction failed: {e}")
+            return {"subject": "Notification", "body": "You have a notification"}
 
     async def create(
         self,
@@ -144,40 +106,59 @@ class BaseNotificationService(ABC):
         actor_id: Optional[uuid.UUID] = None,
         scheduled_for: Optional[datetime] = None,
         expires_at: Optional[datetime] = None,
+        in_app_enabled: bool = True,
+        line_app_enabled: bool = False,
         **metadata,
-    ) -> Dict[str, Any]:
-        """
-        Create notification(s) for the specified recipients
-        Common create logic that sub classes can use
-        """
+    ) -> uuid.UUID:
+        """Create notification and recipients"""
         try:
-            # TODO: Implement notification creation logic
-            # This will create records in the notifications table
-            logger.info(
-                f"Creating {self.__class__.__name__} notification for entity {entity_id} "
-                f"with {len(recipient_ids)} recipients"
-            )
+            notification_type = await self._get_notification_type()
 
-            # Implementation will go here once we have the database model
-            # For now, return placeholder response
-            notification_type_id = await self.get_notification_type_id()
-            priority = await self.get_priority()
-
-            return {
-                "notification_type_id": notification_type_id,
-                "priority": priority,
-                "entity_id": str(entity_id),
-                "actor_type": actor_type,
-                "actor_id": str(actor_id) if actor_id else None,
-                "recipient_count": len(recipient_ids),
-                "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
-                "expires_at": expires_at.isoformat() if expires_at else None,
-                "metadata": metadata,
+            # Create notification record
+            notification_data = {
+                "notification_type_id": notification_type.id,
+                "entity_id": entity_id,
+                "actor_type": ActorType(actor_type),
+                "actor_id": actor_id,
+                "priority": notification_type.default_priority,
+                "notification_metadata": metadata,
+                "scheduled_for": scheduled_for,
+                "expires_at": expires_at,
             }
 
-        except Exception as e:
-            logger.error(
-                f"Failed to create {self.__class__.__name__} notification: {str(e)}",
-                exc_info=True,
+            result = await self.db.execute(
+                insert(Notification)
+                .values(**notification_data)
+                .returning(Notification.id)
             )
-            raise RuntimeError("NOTIFICATION_CREATION_FAILED")
+            notification_id = result.scalar_one()
+
+            # Create recipient records
+            recipient_data = []
+            for recipient_id in recipient_ids:
+                recipient_data.append(
+                    {
+                        "notification_id": notification_id,
+                        "recipient_id": recipient_id,
+                        "in_app_enabled": in_app_enabled,
+                        "line_app_enabled": line_app_enabled,
+                        "status": NotificationStatus.PENDING,
+                    }
+                )
+
+            if recipient_data:
+                await self.db.execute(
+                    insert(NotificationRecipient).values(recipient_data)
+                )
+
+            await self.db.commit()
+
+            logger.info(
+                f"Created notification {notification_id} for {len(recipient_ids)} recipients"
+            )
+            return notification_id
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to create notification: {e}", exc_info=True)
+            raise
