@@ -1,0 +1,441 @@
+from typing import Optional, Dict, Any
+import uuid
+from datetime import timedelta
+
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select
+
+from app.utils.logging import get_logger
+from app.db.models import (
+    ProgramRequirement,
+    AcademicYear,
+    ProgramRequirementSchedule,
+    Program,
+    CertificateType,
+    DashboardStats,
+)
+from app.db.session import get_async_session
+from app.schemas.staff.program_requirement_schedule_schemas import (
+    CreateProgramRequirementScheduleRequest,
+    UpdateProgramRequirementScheduleRequest,
+    ProgramRequirementScheduleResponse,
+    ProgramRequirementScheduleListItemResponse,
+    ProgramRequirementScheduleListResponse,
+)
+
+logger = get_logger()
+
+
+class ProgramRequirementScheduleServiceProvider:
+    """Service provider for program requirement schedule-related business logic and database operations"""
+
+    def __init__(self, db_session: AsyncSession):
+        self.db = db_session
+
+    # Core CRUD Operations
+    async def get_schedule_by_id(
+        self, schedule_id: uuid.UUID
+    ) -> Optional[ProgramRequirementSchedule]:
+        """Get schedule by ID or return None if not found"""
+        result = await self.db.execute(
+            select(ProgramRequirementSchedule).where(
+                ProgramRequirementSchedule.id == schedule_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_program_requirement_by_id(
+        self, program_requirement_id: uuid.UUID
+    ) -> Optional[ProgramRequirement]:
+        """Get program requirement by ID or return None if not found"""
+        result = await self.db.execute(
+            select(ProgramRequirement).where(
+                ProgramRequirement.id == program_requirement_id
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def get_academic_year_by_id(
+        self, academic_year_id: uuid.UUID
+    ) -> Optional[AcademicYear]:
+        """Get academic year by ID or return None if not found"""
+        result = await self.db.execute(
+            select(AcademicYear).where(AcademicYear.id == academic_year_id)
+        )
+        return result.scalar_one_or_none()
+
+    # Validation Methods
+    async def validate_program_requirement_active(
+        self, program_requirement_id: uuid.UUID
+    ) -> ProgramRequirement:
+        """Validate that program requirement exists and is active"""
+        program_requirement = await self.get_program_requirement_by_id(
+            program_requirement_id
+        )
+
+        if not program_requirement:
+            raise ValueError("PROGRAM_REQUIREMENT_NOT_FOUND")
+
+        if not program_requirement.is_active:
+            raise ValueError("PROGRAM_REQUIREMENT_NOT_ACTIVE")
+
+        return program_requirement
+
+    async def validate_academic_year_exists(
+        self, academic_year_id: uuid.UUID
+    ) -> AcademicYear:
+        """Validate that academic year exists"""
+        academic_year = await self.get_academic_year_by_id(academic_year_id)
+
+        if not academic_year:
+            raise ValueError("ACADEMIC_YEAR_NOT_FOUND")
+
+        return academic_year
+
+    async def validate_deadline_within_academic_year(
+        self, academic_year_id: uuid.UUID, submission_deadline
+    ) -> None:
+        """Validate that submission deadline falls within the academic year"""
+        academic_year = await self.validate_academic_year_exists(academic_year_id)
+
+        if not (
+            academic_year.start_date <= submission_deadline <= academic_year.end_date
+        ):
+            raise ValueError("DEADLINE_OUTSIDE_ACADEMIC_YEAR")
+
+    async def check_schedule_exists(
+        self, program_requirement_id: uuid.UUID, academic_year_id: uuid.UUID
+    ) -> bool:
+        """Check if schedule already exists for this combination"""
+        result = await self.db.execute(
+            select(ProgramRequirementSchedule).where(
+                ProgramRequirementSchedule.program_requirement_id
+                == program_requirement_id,
+                ProgramRequirementSchedule.academic_year_id == academic_year_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    async def check_schedule_exists_for_update(
+        self,
+        program_requirement_id: uuid.UUID,
+        academic_year_id: uuid.UUID,
+        current_schedule_id: uuid.UUID,
+    ) -> bool:
+        """Check if schedule already exists for this combination (excluding current schedule)"""
+        result = await self.db.execute(
+            select(ProgramRequirementSchedule).where(
+                ProgramRequirementSchedule.program_requirement_id
+                == program_requirement_id,
+                ProgramRequirementSchedule.academic_year_id == academic_year_id,
+                ProgramRequirementSchedule.id != current_schedule_id,
+            )
+        )
+        return result.scalar_one_or_none() is not None
+
+    # Business Logic Methods
+    async def create_schedule(
+        self, schedule_data: CreateProgramRequirementScheduleRequest
+    ) -> Dict[str, Any]:
+        """Create a new program requirement schedule with validation"""
+        try:
+            # Validate program requirement is active
+            program_requirement = await self.validate_program_requirement_active(
+                schedule_data.program_requirement_id
+            )
+
+            # Validate academic year exists and deadline is within academic year
+            await self.validate_deadline_within_academic_year(
+                schedule_data.academic_year_id, schedule_data.submission_deadline
+            )
+
+            # Check if schedule already exists
+            if await self.check_schedule_exists(
+                schedule_data.program_requirement_id,
+                schedule_data.academic_year_id,
+            ):
+                raise ValueError("SCHEDULE_ALREADY_EXISTS")
+
+            # Use grace_period_days from request or default from program requirement
+            grace_period_days = (
+                schedule_data.grace_period_days
+                if schedule_data.grace_period_days is not None
+                else program_requirement.grace_period_days
+            )
+
+            # Use notification_days_before_deadline from request or default from program requirement
+            notification_days = (
+                schedule_data.notification_days_before_deadline
+                if schedule_data.notification_days_before_deadline is not None
+                else program_requirement.notification_days_before_deadline
+            )
+
+            # Calculate derived fields
+            grace_period_deadline = schedule_data.submission_deadline + timedelta(
+                days=grace_period_days
+            )
+            start_notify_at = schedule_data.submission_deadline - timedelta(
+                days=notification_days
+            )
+
+            # Create new schedule
+            new_schedule = ProgramRequirementSchedule(
+                program_requirement_id=schedule_data.program_requirement_id,
+                academic_year_id=schedule_data.academic_year_id,
+                submission_deadline=schedule_data.submission_deadline,
+                grace_period_deadline=grace_period_deadline,
+                start_notify_at=start_notify_at,
+            )
+
+            self.db.add(new_schedule)
+            await self.db.commit()
+            await self.db.refresh(new_schedule)
+
+            logger.info(f"Created new program requirement schedule: {new_schedule.id}")
+            return self._create_schedule_response(new_schedule)
+
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.warning(f"Integrity error creating schedule: {str(e)}")
+            raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(f"Failed to create schedule: {str(e)}", exc_info=True)
+            raise RuntimeError("SCHEDULE_CREATION_FAILED")
+
+    async def update_schedule(
+        self,
+        schedule_id: uuid.UUID,
+        schedule_data: UpdateProgramRequirementScheduleRequest,
+    ) -> Dict[str, Any]:
+        """Update an existing program requirement schedule with validation"""
+        try:
+            # Get existing schedule
+            existing_schedule = await self.get_schedule_by_id(schedule_id)
+            if not existing_schedule:
+                raise ValueError("SCHEDULE_NOT_FOUND")
+
+            # Validate that program_requirement_id matches (cannot be modified)
+            if (
+                existing_schedule.program_requirement_id
+                != schedule_data.program_requirement_id
+            ):
+                raise ValueError("INVALID_PROGRAM_REQUIREMENT_MODIFICATION")
+
+            # Validate program requirement is still active
+            program_requirement = await self.validate_program_requirement_active(
+                schedule_data.program_requirement_id
+            )
+
+            # Validate academic year exists and deadline is within academic year
+            await self.validate_deadline_within_academic_year(
+                schedule_data.academic_year_id, schedule_data.submission_deadline
+            )
+
+            # Check if schedule already exists for new academic year (excluding current)
+            if schedule_data.academic_year_id != existing_schedule.academic_year_id:
+                if await self.check_schedule_exists_for_update(
+                    schedule_data.program_requirement_id,
+                    schedule_data.academic_year_id,
+                    schedule_id,
+                ):
+                    raise ValueError("SCHEDULE_ALREADY_EXISTS")
+
+            # Use grace_period_days from request or default from program requirement
+            grace_period_days = (
+                schedule_data.grace_period_days
+                if schedule_data.grace_period_days is not None
+                else program_requirement.grace_period_days
+            )
+
+            # Use notification_days_before_deadline from request or default from program requirement
+            notification_days = (
+                schedule_data.notification_days_before_deadline
+                if schedule_data.notification_days_before_deadline is not None
+                else program_requirement.notification_days_before_deadline
+            )
+
+            # Calculate derived fields
+            grace_period_deadline = schedule_data.submission_deadline + timedelta(
+                days=grace_period_days
+            )
+            start_notify_at = schedule_data.submission_deadline - timedelta(
+                days=notification_days
+            )
+
+            # Update schedule fields
+            existing_schedule.academic_year_id = schedule_data.academic_year_id
+            existing_schedule.submission_deadline = schedule_data.submission_deadline
+            existing_schedule.grace_period_deadline = grace_period_deadline
+            existing_schedule.start_notify_at = start_notify_at
+
+            await self.db.commit()
+            await self.db.refresh(existing_schedule)
+
+            logger.info(f"Updated program requirement schedule: {existing_schedule.id}")
+            return self._create_schedule_response(existing_schedule)
+
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.warning(f"Integrity error updating schedule: {str(e)}")
+            raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(
+                f"Failed to update schedule {schedule_id}: {str(e)}", exc_info=True
+            )
+            raise RuntimeError("SCHEDULE_UPDATE_FAILED")
+
+    async def get_all_schedules_with_details(self) -> Dict[str, Any]:
+        """Get all program requirement schedules with comprehensive related data"""
+        try:
+            # Complex query with all necessary joins
+            query = (
+                select(
+                    ProgramRequirementSchedule,
+                    Program.id.label("program_id"),
+                    Program.program_code,
+                    Program.program_name,
+                    CertificateType.id.label("cert_id"),
+                    CertificateType.code.label("cert_code"),
+                    CertificateType.name.label("cert_name"),
+                    AcademicYear.year_code.label("academic_year"),
+                    ProgramRequirement.name.label("requirement_name"),
+                    ProgramRequirement.target_year,
+                    ProgramRequirement.is_mandatory,
+                    DashboardStats.total_submissions_required,
+                    DashboardStats.submitted_count,
+                    DashboardStats.approved_count,
+                    DashboardStats.rejected_count,
+                    DashboardStats.pending_count,
+                    DashboardStats.manual_review_count,
+                    DashboardStats.not_submitted_count,
+                    DashboardStats.on_time_submissions,
+                    DashboardStats.late_submissions,
+                    DashboardStats.overdue_count,
+                )
+                .select_from(ProgramRequirementSchedule)
+                .join(
+                    ProgramRequirement,
+                    ProgramRequirementSchedule.program_requirement_id
+                    == ProgramRequirement.id,
+                )
+                .join(Program, ProgramRequirement.program_id == Program.id)
+                .join(
+                    CertificateType,
+                    ProgramRequirement.cert_type_id == CertificateType.id,
+                )
+                .join(
+                    AcademicYear,
+                    ProgramRequirementSchedule.academic_year_id == AcademicYear.id,
+                )
+                .outerjoin(
+                    DashboardStats,
+                    DashboardStats.requirement_schedule_id
+                    == ProgramRequirementSchedule.id,
+                )
+                .order_by(
+                    Program.program_code,
+                    AcademicYear.year_code,
+                    ProgramRequirementSchedule.submission_deadline,
+                )
+            )
+
+            result = await self.db.execute(query)
+            rows = result.fetchall()
+
+            # Transform results into response format
+            schedule_items = []
+            has_dashboard_stats = False
+
+            for row in rows:
+                schedule = row[0]  # ProgramRequirementSchedule object
+
+                # Check if any dashboard stats exist
+                if row.total_submissions_required is not None:
+                    has_dashboard_stats = True
+
+                schedule_item = ProgramRequirementScheduleListItemResponse(
+                    # Schedule core fields
+                    id=schedule.id,
+                    program_requirement_id=schedule.program_requirement_id,
+                    submission_deadline=schedule.submission_deadline,
+                    grace_period_deadline=schedule.grace_period_deadline,
+                    start_notify_at=schedule.start_notify_at,
+                    last_notified_at=schedule.last_notified_at,
+                    # Program information
+                    program_id=row.program_id,
+                    program_code=row.program_code,
+                    program_name=row.program_name,
+                    # Certificate type information
+                    cert_id=row.cert_id,
+                    cert_code=row.cert_code,
+                    cert_name=row.cert_name,
+                    # Academic year information
+                    academic_year=row.academic_year,
+                    # Program requirement information
+                    requirement_name=row.requirement_name,
+                    target_year=row.target_year,
+                    is_mandatory=row.is_mandatory,
+                    # Dashboard statistics (optional)
+                    total_submissions_required=row.total_submissions_required,
+                    submitted_count=row.submitted_count,
+                    approved_count=row.approved_count,
+                    rejected_count=row.rejected_count,
+                    pending_count=row.pending_count,
+                    manual_review_count=row.manual_review_count,
+                    not_submitted_count=row.not_submitted_count,
+                    on_time_submissions=row.on_time_submissions,
+                    late_submissions=row.late_submissions,
+                    overdue_count=row.overdue_count,
+                )
+                schedule_items.append(schedule_item)
+
+            # Prepare final response
+            response_data = ProgramRequirementScheduleListResponse(
+                schedules=schedule_items,
+                total_count=len(schedule_items),
+                has_dashboard_stats=has_dashboard_stats,
+            )
+
+            logger.info(
+                f"Retrieved {len(schedule_items)} program requirement schedules"
+            )
+            return response_data.model_dump()
+
+        except Exception as e:
+            logger.error(f"Failed to retrieve schedules: {str(e)}", exc_info=True)
+            raise RuntimeError("SCHEDULES_RETRIEVAL_FAILED")
+
+    # Helper Methods
+    def _create_schedule_response(
+        self, schedule: ProgramRequirementSchedule
+    ) -> Dict[str, Any]:
+        """Create standardized schedule response data"""
+        schedule_response = ProgramRequirementScheduleResponse(
+            id=schedule.id,
+            program_requirement_id=schedule.program_requirement_id,
+            academic_year_id=schedule.academic_year_id,
+            submission_deadline=schedule.submission_deadline,
+            grace_period_deadline=schedule.grace_period_deadline,
+            start_notify_at=schedule.start_notify_at,
+            last_notified_at=schedule.last_notified_at,
+            created_at=schedule.created_at,
+            updated_at=schedule.updated_at,
+        )
+        return schedule_response.model_dump()
+
+    @staticmethod
+    def build_success_message(schedules_count: int) -> str:
+        """Build descriptive success message for list operations"""
+        return f"Retrieved {schedules_count} program requirement schedule{'s' if schedules_count != 1 else ''} successfully"
+
+
+# Dependency injection for service provider
+def get_program_requirement_schedule_service(
+    db: AsyncSession = Depends(get_async_session),
+) -> ProgramRequirementScheduleServiceProvider:
+    """Dependency to provide ProgramRequirementScheduleServiceProvider instance"""
+    return ProgramRequirementScheduleServiceProvider(db)

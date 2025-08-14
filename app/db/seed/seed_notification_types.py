@@ -48,11 +48,11 @@ async def seed_notification_types(db_session: AsyncSession):
         {
             "entity_type": "CertificateSubmission",
             "code": "certificate_submission_request",
-            "name": "Certificate Action Requested",
-            "description": "A student has requested an action on a certificate.",
-            "default_priority": Priority.MEDIUM,
+            "name": "Certificate Review Requested",
+            "description": "A certificate submission requires a manual review.",
+            "default_priority": Priority.HIGH,
         },
-        # ProgramRequirement actions
+        # ProgramRequirementSchedule actions
         {
             "entity_type": "ProgramRequirementSchedule",
             "code": "program_requirement_overdue",
