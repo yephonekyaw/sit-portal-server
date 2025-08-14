@@ -10,6 +10,7 @@ logger = get_logger()
 
 
 async def get_notification_message(
+    notification_id: uuid.UUID,
     notification_code: str,
     entity_id: uuid.UUID,
     db_session: AsyncSession,
@@ -23,7 +24,9 @@ async def get_notification_message(
         if not service:
             return None
 
-        notification_data = await service.get_notification_data(entity_id)
+        notification_data = await service.get_notification_data(
+            entity_id, notification_id
+        )
         message = await service.construct_message(channel_type, notification_data)
 
         logger.info(f"Generated message for {notification_code}, entity {entity_id}")

@@ -77,6 +77,7 @@ class UserNotificationService:
                         notification.notification_type.code,
                         notification.entity_id,
                         channel_type="in_app",  # Use lowercase to match ChannelType enum
+                        notification_id=notification.id,
                     )
 
                     formatted_notification = {
@@ -265,7 +266,11 @@ class UserNotificationService:
             return 0
 
     async def _get_notification_content(
-        self, notification_code: str, entity_id: uuid.UUID, channel_type: str
+        self,
+        notification_code: str,
+        entity_id: uuid.UUID,
+        channel_type: str,
+        notification_id: uuid.UUID,
     ) -> Optional[Dict[str, str]]:
         """Get formatted notification content using notification service"""
         try:
@@ -278,7 +283,9 @@ class UserNotificationService:
                 )
                 return None
 
-            notification_data = await service.get_notification_data(entity_id)
+            notification_data = await service.get_notification_data(
+                entity_id, notification_id
+            )
             message = await service.construct_message(channel_type, notification_data)
             return message
 

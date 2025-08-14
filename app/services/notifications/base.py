@@ -44,7 +44,9 @@ class BaseNotificationService(ABC):
         return self._notification_type
 
     @abstractmethod
-    async def get_notification_data(self, entity_id: uuid.UUID) -> Dict[str, Any]:
+    async def get_notification_data(
+        self, entity_id: uuid.UUID, notification_id: uuid.UUID
+    ) -> Dict[str, Any]:
         """Get data for notification templates - implemented by subclasses"""
         pass
 

@@ -13,6 +13,7 @@ The notification service provides a unified interface for creating and managing 
 - **Multi-channel**: Support for in-app and LINE app notifications
 - **Type-safe**: Full database integration with proper transaction handling
 - **Extensible**: Easy to add new notification types
+- **Metadata support**: Dynamic template variables via notification metadata
 
 ## Architecture
 
@@ -46,14 +47,16 @@ The system uses these main database tables:
 ```python
 from app.services.notifications import create_notification
 
-# Create a certificate submission notification
+# Create a certificate submission notification with metadata
 notification_id = await create_notification(
     notification_code="certificate_submission_submit",
     entity_id=submission_id,
     actor_type="user",
     recipient_ids=[user_id],
     db_session=db,
-    actor_id=staff_user_id  # Optional
+    actor_id=staff_user_id,  # Optional
+    verifier_name="Dr. John Smith",  # Custom metadata for templates
+    additional_notes="Expedited review"  # Any additional metadata
 )
 ```
 
@@ -116,6 +119,54 @@ summary = await get_user_notifications_summary(user_id, db_session)
 | `program_requirement_warn` | Approaching deadline | Configurable days before deadline |
 | `program_requirement_remind` | General reminder | Periodic reminders |
 
+## Metadata Support
+
+The notification system supports dynamic template variables through metadata passed during notification creation:
+
+### Passing Metadata
+
+```python
+# Create notification with custom metadata
+notification_id = await create_notification(
+    notification_code="certificate_submission_verify",
+    entity_id=submission_id,
+    actor_type="staff",
+    recipient_ids=[student_id],
+    db_session=db,
+    verifier_name="Prof. Jane Smith",  # Custom verifier name
+    verification_date="2024-01-15",    # Custom verification date
+    comments="Excellent work"          # Additional comments
+)
+```
+
+### Accessing Metadata in Templates
+
+Metadata fields are automatically available in templates alongside standard entity fields:
+
+```
+Subject: {certificate_name} verified by {verifier_name}
+
+Body: 
+Dear {student_name},
+
+Your {certificate_name} has been verified by {verifier_name} on {verification_date}.
+
+Reviewer comments: {comments}
+
+Best regards,
+SIT Portal
+```
+
+### Metadata Priority
+
+- **Custom metadata** takes precedence over default entity fields
+- **Entity fields** are used when no metadata override exists
+- **Fallback values** are used when neither metadata nor entity data is available
+
+For example, `verifier_name` will use:
+1. Metadata value if provided during notification creation
+2. Default value "System" if no metadata provided
+
 ## Templates
 
 ### Available Variables
@@ -132,7 +183,8 @@ Template variables are automatically provided based on the entity type:
 - `{updated_date}` - Last updated date
 - `{status}` - Current submission status
 - `{filename}` - Uploaded file name
-- `{verifier_name}` - Who verified/rejected
+- `{verifier_name}` - Who verified/rejected (from metadata or defaults to "System")
+- Any custom metadata fields passed during notification creation
 
 #### Program Requirements
 - `{schedule_id}` - Schedule UUID
@@ -214,15 +266,35 @@ Create a service file for new entity types (e.g., `new_entity_service.py`):
 from .base import BaseNotificationService
 
 class NewEntityNotificationService(BaseNotificationService):
-    async def get_notification_data(self, entity_id: uuid.UUID) -> Dict[str, Any]:
+    async def get_notification_data(self, entity_id: uuid.UUID, notification_id: uuid.UUID = None) -> Dict[str, Any]:
         # Fetch entity data and return template variables
         result = await self.db.execute(select(NewEntity).where(NewEntity.id == entity_id))
         entity = result.scalar_one_or_none()
         
-        return {
+        # Get notification metadata if notification_id is provided
+        notification_metadata = {}
+        if notification_id:
+            try:
+                notification_result = await self.db.execute(
+                    select(Notification.notification_metadata)
+                    .where(Notification.id == notification_id)
+                )
+                metadata = notification_result.scalar_one_or_none()
+                if metadata:
+                    notification_metadata = metadata
+            except Exception as e:
+                logger.warning(f"Could not fetch notification metadata for {notification_id}: {e}")
+        
+        data = {
             "placeholder": entity.some_field,
-            # ... other template variables
+            # ... other template variables from entity
         }
+        
+        # Merge any additional metadata
+        if notification_metadata:
+            data.update({k: v for k, v in notification_metadata.items() if k not in data})
+        
+        return data
 
 def create_new_entity_service(db_session, notification_code: str) -> NewEntityNotificationService:
     return NewEntityNotificationService(db_session, notification_code)
