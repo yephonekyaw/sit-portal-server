@@ -1,0 +1,354 @@
+import asyncio
+from typing import Optional
+from datetime import datetime, timezone
+import uuid
+import random
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, and_
+from sqlalchemy.orm import selectinload
+
+from app.celery import celery
+from app.db.session import get_async_session
+from app.db.models import (
+    NotificationRecipient,
+    NotificationStatus,
+    Notification,
+    Student,
+    User,
+)
+from app.services.notifications.registry import NotificationServiceRegistry
+from app.utils.logging import get_logger
+
+
+@celery.task(bind=True, max_retries=5, default_retry_delay=120)
+async def send_line_notification_task(
+    self, request_id: str, notification_id: str, recipient_id: str
+):
+    """
+    Celery task to send a LINE notification to a specific recipient.
+
+    This is a mock implementation for now. In the future, this will integrate
+    with the actual LINE messaging API.
+
+    Args:
+        request_id: The request ID from the original HTTP request
+        notification_id: UUID of the notification (as string)
+        recipient_id: UUID of the recipient (as string)
+    """
+    logger = get_logger().bind(request_id=request_id)
+    db_session: AsyncSession | None = None
+
+    try:
+        logger.info(
+            "Starting LINE notification sending task",
+            notification_id=notification_id,
+            recipient_id=recipient_id,
+            request_id=request_id,
+        )
+
+        # Get async database session using context manager
+        async for db_session in get_async_session():
+            break
+
+        if not db_session:
+            logger.error("Failed to get database session")
+            return {
+                "success": False,
+                "error": "Failed to get database session",
+                "request_id": request_id,
+            }
+
+        # Get notification and recipient in a single optimized query
+        notification_result = await db_session.execute(
+            select(Notification, NotificationRecipient)
+            .join(
+                NotificationRecipient,
+                Notification.id == NotificationRecipient.notification_id,
+            )
+            .options(selectinload(Notification.notification_type))
+            .where(
+                and_(
+                    Notification.id == uuid.UUID(notification_id),
+                    NotificationRecipient.recipient_id == uuid.UUID(recipient_id),
+                )
+            )
+        )
+        result_row = notification_result.first()
+        if not result_row:
+            logger.error(
+                "Notification or recipient not found",
+                notification_id=notification_id,
+                recipient_id=recipient_id,
+            )
+            return {
+                "success": False,
+                "error": "Notification or recipient not found",
+                "request_id": request_id,
+            }
+
+        notification, recipient = result_row
+
+        # Get formatted message content using NotificationServiceRegistry directly
+        service = NotificationServiceRegistry.create_service(
+            notification.notification_type.code, db_session
+        )
+
+        if not service:
+            logger.error(
+                "No service found for notification code",
+                notification_code=notification.notification_type.code,
+            )
+            recipient.status = NotificationStatus.FAILED
+            await db_session.commit()
+            return {
+                "success": False,
+                "error": f"No service found for notification code: {notification.notification_type.code}",
+                "request_id": request_id,
+            }
+
+        try:
+            notification_data = await service.get_notification_data(
+                notification.entity_id, uuid.UUID(notification_id)
+            )
+            message = await service.construct_message("line_app", notification_data)
+        except Exception as e:
+            logger.error(
+                "Failed to get notification data or construct message",
+                notification_id=notification_id,
+                error=str(e),
+            )
+            message = None
+
+        if not message:
+            logger.error(
+                "Failed to get notification message content",
+                notification_id=notification_id,
+            )
+            recipient.status = NotificationStatus.FAILED
+            await db_session.commit()
+            return {
+                "success": False,
+                "error": "Failed to get message content",
+                "request_id": request_id,
+            }
+
+        # Validate recipient can receive LINE notifications
+        if not await _validate_line_recipient(db_session, uuid.UUID(recipient_id)):
+            logger.warning(
+                "Recipient not configured for LINE notifications",
+                recipient_id=recipient_id,
+            )
+            recipient.status = NotificationStatus.FAILED
+            await db_session.commit()
+            return {
+                "success": False,
+                "error": "Recipient not configured for LINE notifications",
+                "request_id": request_id,
+            }
+
+        # Get recipient's LINE user ID
+        line_user_id = await _get_line_user_id(db_session, uuid.UUID(recipient_id))
+        if not line_user_id:
+            logger.error(
+                "Recipient LINE user ID not found",
+                recipient_id=recipient_id,
+            )
+            recipient.status = NotificationStatus.FAILED
+            await db_session.commit()
+            return {
+                "success": False,
+                "error": "Recipient LINE user ID not found",
+                "request_id": request_id,
+            }
+
+        # MOCK: Simulate LINE API call
+        mock_line_success = await _mock_send_line_message(
+            line_user_id=line_user_id,
+            subject=message.get("subject", "Notification"),
+            body=message.get("body", "You have a notification"),
+            logger=logger,
+        )
+
+        if mock_line_success:
+            # Update recipient status
+            recipient.status = NotificationStatus.DELIVERED
+            recipient.line_app_sent_at = datetime.now(timezone.utc)
+            recipient.delivered_at = datetime.now(timezone.utc)
+            await db_session.commit()
+
+            logger.info(
+                "LINE notification sent successfully",
+                notification_id=notification_id,
+                recipient_id=recipient_id,
+            )
+
+            return {
+                "success": True,
+                "channel": "line_app",
+                "notification_id": notification_id,
+                "recipient_id": recipient_id,
+                "request_id": request_id,
+            }
+        else:
+            # Mark as failed and retry
+            recipient.status = NotificationStatus.FAILED
+            await db_session.commit()
+
+            if self.request.retries < self.max_retries:
+                logger.info(
+                    f"Retrying LINE notification (attempt {self.request.retries + 1}/{self.max_retries})"
+                )
+                # Cap retry delay at 10 minutes
+                retry_delay = min(2**self.request.retries * 120, 600)
+                raise self.retry(countdown=retry_delay)
+
+            return {
+                "success": False,
+                "error": "Failed to send LINE notification after all retries",
+                "request_id": request_id,
+            }
+
+    except Exception as e:
+        logger.error(
+            "LINE notification sending task exception",
+            notification_id=notification_id,
+            recipient_id=recipient_id,
+            request_id=request_id,
+            error=str(e),
+            exc_info=True,
+        )
+
+        if db_session:
+            await db_session.rollback()
+
+        # Retry for transient errors
+        if self.request.retries < self.max_retries:
+            logger.info(
+                f"Retrying LINE notification task (attempt {self.request.retries + 1}/{self.max_retries})"
+            )
+            # Cap retry delay at 10 minutes
+            retry_delay = min(2**self.request.retries * 120, 600)
+            raise self.retry(countdown=retry_delay)
+
+        return {
+            "success": False,
+            "error": str(e),
+            "notification_id": notification_id,
+            "recipient_id": recipient_id,
+            "request_id": request_id,
+        }
+    finally:
+        if db_session:
+            await db_session.close()
+
+
+async def _validate_line_recipient(
+    db_session: AsyncSession, recipient_id: uuid.UUID
+) -> bool:
+    """
+    Validate that recipient has LINE configured.
+
+    Checks if the user is a student and has a line_application_id set.
+    """
+    try:
+        result = await db_session.execute(
+            select(Student).join(User).where(User.id == recipient_id)
+        )
+        student = result.scalar_one_or_none()
+
+        if not student:
+            return False
+
+        if not student.line_application_id:
+            return False
+
+        return True
+
+    except Exception:
+        return False
+
+
+async def _get_line_user_id(
+    db_session: AsyncSession, recipient_id: uuid.UUID
+) -> Optional[str]:
+    """Get the recipient's LINE user ID"""
+    try:
+        result = await db_session.execute(
+            select(Student.line_application_id)
+            .join(User)
+            .where(User.id == recipient_id)
+        )
+        line_application_id = result.scalar_one_or_none()
+        return line_application_id
+
+    except Exception:
+        return None
+
+
+async def _mock_send_line_message(
+    line_user_id: str, subject: str, body: str, logger
+) -> bool:
+    """
+    Mock function to simulate sending a LINE message.
+
+    TODO: Replace this with actual LINE messaging API integration.
+
+    Production implementation would look like:
+
+    import aiohttp
+    from app.config.settings import settings
+
+    async def _send_line_message(line_user_id: str, subject: str, body: str) -> bool:
+        headers = {
+            'Authorization': f'Bearer {settings.LINE_CHANNEL_ACCESS_TOKEN}',
+            'Content-Type': 'application/json',
+        }
+
+        payload = {
+            'to': line_user_id,
+            'messages': [
+                {
+                    'type': 'text',
+                    'text': f"{subject}\\n\\n{body}"
+                }
+            ]
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                'https://api.line.me/v2/bot/message/push',
+                headers=headers,
+                json=payload
+            ) as response:
+                return response.status == 200
+
+    Returns:
+        bool: True if successful, False if failed
+    """
+
+    logger.info(
+        "MOCK: Sending LINE message",
+        line_user_id=line_user_id,
+        subject=subject,
+        body_length=len(body),
+    )
+
+    # Simulate network delay (removed for performance)
+    # await asyncio.sleep(1)
+
+    # Simulate 95% success rate
+    success = random.random() > 0.05
+
+    if success:
+        logger.info(
+            "MOCK: LINE message sent successfully",
+            line_user_id=line_user_id,
+        )
+    else:
+        logger.warning(
+            "MOCK: LINE message failed to send",
+            line_user_id=line_user_id,
+        )
+
+    return success

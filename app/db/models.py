@@ -868,11 +868,13 @@ class NotificationRecipient(Base, AuditMixin):
     status: Mapped[NotificationStatus] = mapped_column(
         Enum(NotificationStatus), default=NotificationStatus.PENDING, nullable=False
     )
+    # delivered_at will be set when the notification for this recipient is processed by the notification processing task
+    # for each delivery channel, such as line, the corresponding sent_at will be set from the channel's delivery task
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
     line_app_sent_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True)
     )
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
 
     # Relationships
     notification: Mapped["Notification"] = relationship(back_populates="recipients")

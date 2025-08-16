@@ -1,439 +1,226 @@
-# Notification Service Documentation
+# Notification System Flow
 
-Template-based notification system for the SIT Portal application.
+Async notification system for SIT Portal using Celery tasks and template-based messaging.
 
 ## Overview
 
-The notification service provides a unified interface for creating and managing notifications across different entity types (certificate submissions, program requirements, etc.) with template-based message formatting.
-
-### Features
-
-- **Unified API**: Single interface for all notification types
-- **Template-based**: Database-driven message templates with placeholder substitution
-- **Multi-channel**: Support for in-app and LINE app notifications
-- **Type-safe**: Full database integration with proper transaction handling
-- **Extensible**: Easy to add new notification types
-- **Metadata support**: Dynamic template variables via notification metadata
+The notification system follows this flow:
+1. **Trigger** → Create notification request
+2. **Create** → Store notification in database  
+3. **Process** → Check expiry and dispatch to channels
+4. **Deliver** → Send via in-app or LINE
 
 ## Architecture
 
-### Core Components
+```
+Entry Point (utils.py)
+    ↓
+notification_creation.py (Celery Task)
+    ↓
+notification_processing.py (Celery Task)
+    ↓
+line_notification_sender.py (Celery Task)
+```
+
+### Files Structure
 
 ```
 notifications/
-├── __init__.py           # Public API exports
-├── base.py              # Abstract base service class
-├── certificate_service.py # Certificate submission notifications
-├── schedule_service.py   # Program requirement schedule notifications
-├── deadline_utils.py     # Deadline calculation utilities
-├── registry.py          # Service factory and registration
-├── user_notifications.py # User-facing notification retrieval
-└── utils.py             # Utility functions for common operations
+├── utils.py              # Entry point - create_notification_async()
+├── base.py               # Base service class
+├── certificate_service.py # Certificate notification logic
+├── schedule_service.py    # Schedule notification logic
+├── registry.py           # Service factory
+└── user_notifications.py # User-facing notifications
+
+tasks/
+├── notification_creation.py    # Step 1: Create notification
+├── notification_processing.py  # Step 2: Process and dispatch
+└── line_notification_sender.py # Step 3: LINE delivery
 ```
 
-### Database Schema
+## Notification Flow
 
-The system uses these main database tables:
-
-- **`notification_types`**: Defines available notification types and default settings
-- **`notification_channel_templates`**: Message templates per notification type and channel
-- **`notifications`**: Individual notification instances
-- **`notification_recipients`**: Links notifications to users with delivery status
-
-## Usage
-
-### Creating Notifications
+### 1. Entry Point (utils.py)
 
 ```python
-from app.services.notifications import create_notification
+from app.services.notifications.utils import create_notification_async
 
-# Create a certificate submission notification with metadata
-notification_id = await create_notification(
+# Trigger async notification
+task_id = create_notification_async(
+    request_id="req-123",
     notification_code="certificate_submission_submit",
     entity_id=submission_id,
-    actor_type="user",
+    actor_type="user", 
     recipient_ids=[user_id],
-    db_session=db,
-    actor_id=staff_user_id,  # Optional
-    verifier_name="Dr. John Smith",  # Custom metadata for templates
-    additional_notes="Expedited review"  # Any additional metadata
+    verifier_name="Dr. Smith"  # Custom metadata
 )
 ```
 
-### Getting Formatted Messages
+### 2. Creation Task (notification_creation.py)
 
-```python
-from app.services.notifications import get_notification_message
+**Purpose**: Creates notification record in database
+- Converts strings back to UUIDs
+- Uses service registry to find correct handler
+- Calls service.create() to store notification
+- Triggers processing task if not scheduled
 
-# Get a formatted message for display
-message = await get_notification_message(
-    notification_code="certificate_submission_verify",
-    entity_id=submission_id,
-    channel_type="in_app",
-    db_session=db
-)
+### 3. Processing Task (notification_processing.py)
 
-print(message["subject"])  # "Certificate Verified"
-print(message["body"])     # "Your certificate submission has been verified..."
-```
+**Purpose**: Processes notification and dispatches to channels
+- Checks if notification expired
+- For each recipient:
+  - In-app: Mark as delivered immediately
+  - LINE: Create LINE delivery task
 
-### User Notifications
+### 4. LINE Delivery Task (line_notification_sender.py)
 
-```python
-from app.services.notifications import UserNotificationService
-
-service = UserNotificationService(db_session)
-
-# Get user's notifications
-notifications = await service.get_user_notifications(
-    user_id=user_id,
-    limit=20,
-    unread_only=True
-)
-
-# Mark notification as read
-success = await service.mark_notification_as_read(user_id, notification_id)
-
-# Get summary for dashboard
-summary = await get_user_notifications_summary(user_id, db_session)
-```
+**Purpose**: Sends LINE messages
+- Gets notification + recipient in single query
+- Uses service to format message
+- Validates recipient has LINE configured
+- Calls mock LINE API (95% success rate)
 
 ## Notification Types
 
 ### Certificate Submissions
-
-| Code | Description | Triggered When |
-|------|-------------|----------------|
-| `certificate_submission_submit` | New submission | Student uploads certificate |
-| `certificate_submission_update` | Submission updated | Student modifies submission |
-| `certificate_submission_delete` | Submission deleted | Student/staff deletes submission |
-| `certificate_submission_verify` | Submission approved | Staff approves submission |
-| `certificate_submission_reject` | Submission rejected | Staff rejects submission |
-| `certificate_submission_request` | Review requested | Manual review needed |
+- `certificate_submission_submit` - Student uploads certificate
+- `certificate_submission_verify` - Staff approves submission  
+- `certificate_submission_reject` - Staff rejects submission
 
 ### Program Requirements
+- `program_requirement_warn` - Approaching deadline
+- `program_requirement_overdue` - Deadline passed
 
-| Code | Description | Triggered When |
-|------|-------------|----------------|
-| `program_requirement_overdue` | Deadline passed | Deadline exceeded without submission |
-| `program_requirement_warn` | Approaching deadline | Configurable days before deadline |
-| `program_requirement_remind` | General reminder | Periodic reminders |
+## Template System
 
-## Metadata Support
+Templates are stored in database with placeholders:
 
-The notification system supports dynamic template variables through metadata passed during notification creation:
+**Template Example:**
+```
+Subject: {certificate_name} {status}
+Body: Dear {student_name}, your {certificate_name} has been {status}.
+```
 
-### Passing Metadata
+**Data Sources:**
+1. Entity data (from certificate_service.py)
+2. Custom metadata (passed in create_notification_async)
+3. Default values
 
+## Performance Optimizations
+
+### Database Queries
+- Single join query for notification + recipient
+- Proper async session management  
+- Optimized imports at module level
+
+### Task Improvements
+- Native async tasks (no asyncio.run())
+- Capped exponential backoff
+- Proper error handling
+
+### Retry Policies
+- Creation: 3 retries, max 5 min delay
+- Processing: 3 retries, max 5 min delay
+- LINE delivery: 5 retries, max 10 min delay
+
+## Usage Examples
+
+### Basic Usage
 ```python
-# Create notification with custom metadata
-notification_id = await create_notification(
+from app.services.notifications.utils import create_notification_async
+
+# Simple notification
+task_id = create_notification_async(
+    request_id="req-123",
+    notification_code="certificate_submission_submit",
+    entity_id=submission_id,
+    actor_type="user",
+    recipient_ids=[student_id]
+)
+```
+
+### With Custom Metadata
+```python
+# Notification with custom data for templates
+task_id = create_notification_async(
+    request_id="req-456", 
     notification_code="certificate_submission_verify",
     entity_id=submission_id,
     actor_type="staff",
     recipient_ids=[student_id],
-    db_session=db,
-    verifier_name="Prof. Jane Smith",  # Custom verifier name
-    verification_date="2024-01-15",    # Custom verification date
-    comments="Excellent work"          # Additional comments
+    verifier_name="Prof. Jane Smith",
+    comments="Excellent work",
+    in_app_enabled=True,
+    line_app_enabled=True
 )
 ```
 
-### Accessing Metadata in Templates
+### Scheduled Notifications
+```python
+from datetime import datetime, timedelta
 
-Metadata fields are automatically available in templates alongside standard entity fields:
-
-```
-Subject: {certificate_name} verified by {verifier_name}
-
-Body: 
-Dear {student_name},
-
-Your {certificate_name} has been verified by {verifier_name} on {verification_date}.
-
-Reviewer comments: {comments}
-
-Best regards,
-SIT Portal
-```
-
-### Metadata Priority
-
-- **Custom metadata** takes precedence over default entity fields
-- **Entity fields** are used when no metadata override exists
-- **Fallback values** are used when neither metadata nor entity data is available
-
-For example, `verifier_name` will use:
-1. Metadata value if provided during notification creation
-2. Default value "System" if no metadata provided
-
-## Templates
-
-### Available Variables
-
-Template variables are automatically provided based on the entity type:
-
-#### Certificate Submissions
-- `{submission_id}` - Submission UUID
-- `{certificate_name}` - Certificate type name
-- `{student_name}` - Full student name
-- `{student_roll_number}` - Student ID
-- `{program_name}` - Academic program name
-- `{submission_date}` - Date submitted
-- `{updated_date}` - Last updated date
-- `{status}` - Current submission status
-- `{filename}` - Uploaded file name
-- `{verifier_name}` - Who verified/rejected (from metadata or defaults to "System")
-- Any custom metadata fields passed during notification creation
-
-#### Program Requirements
-- `{schedule_id}` - Schedule UUID
-- `{requirement_name}` - Requirement name
-- `{program_name}` - Academic program name
-- `{program_code}` - Program code
-- `{academic_year}` - Academic year
-- `{deadline_date}` - Submission deadline
-- `{days_remaining}` - Days until deadline
-- `{days_overdue}` - Days past deadline
-- `{mandatory_flag}` - "This is a mandatory/optional requirement."
-- `{target_year}` - Target student year
-
-### Example Template
-
-**Template Definition:**
-```
-Subject: Certificate {status} - {certificate_name}
-
-Body:
-Dear {student_name},
-
-Your {certificate_name} submission has been {status}.
-
-Submission Details:
-- Student ID: {student_roll_number}
-- Program: {program_name}
-- Status: {status}
-- Date: {submission_date}
-
-Thank you.
-```
-
-**Rendered Result:**
-```
-Subject: Certificate approved - Microsoft Azure Fundamentals
-
-Dear John Doe,
-
-Your Microsoft Azure Fundamentals submission has been approved.
-
-Submission Details:
-- Student ID: 2021001
-- Program: Information Systems
-- Status: approved  
-- Date: 2024-01-15
-
-Thank you.
+# Schedule for later
+future_time = datetime.now() + timedelta(hours=2)
+task_id = create_notification_async(
+    request_id="req-789",
+    notification_code="program_requirement_warn", 
+    entity_id=schedule_id,
+    actor_type="system",
+    recipient_ids=student_ids,
+    scheduled_for=future_time
+)
 ```
 
 ## Adding New Notification Types
 
-### Database Setup
-
-Add new notification type:
-
+### 1. Database Setup
 ```sql
-INSERT INTO notification_types (code, name, description, entity_type, default_priority) 
-VALUES ('new_notification_type', 'New Notification', 'Description', 'entity_name', 'medium');
-```
+-- Add notification type
+INSERT INTO notification_types (code, name, description, entity_type) 
+VALUES ('new_type', 'New Type', 'Description', 'entity_name');
 
-Add templates for each channel:
-
-```sql
+-- Add template
 INSERT INTO notification_channel_templates (notification_type_id, channel_type, template_subject, template_body)
 VALUES (
-    (SELECT id FROM notification_types WHERE code = 'new_notification_type'),
+    (SELECT id FROM notification_types WHERE code = 'new_type'),
     'in_app',
-    'Subject with {placeholder}',
-    'Body with {placeholder} variables'
+    'Subject: {placeholder}',
+    'Body: {placeholder} content'
 );
 ```
 
-### Service Implementation
-
-Create a service file for new entity types (e.g., `new_entity_service.py`):
-
+### 2. Create Service
 ```python
+# new_service.py
 from .base import BaseNotificationService
 
-class NewEntityNotificationService(BaseNotificationService):
-    async def get_notification_data(self, entity_id: uuid.UUID, notification_id: uuid.UUID = None) -> Dict[str, Any]:
-        # Fetch entity data and return template variables
-        result = await self.db.execute(select(NewEntity).where(NewEntity.id == entity_id))
-        entity = result.scalar_one_or_none()
+class NewNotificationService(BaseNotificationService):
+    async def get_notification_data(self, entity_id, notification_id=None):
+        # Fetch entity data
+        entity = await self.get_entity(entity_id)
         
-        # Get notification metadata if notification_id is provided
-        notification_metadata = {}
-        if notification_id:
-            try:
-                notification_result = await self.db.execute(
-                    select(Notification.notification_metadata)
-                    .where(Notification.id == notification_id)
-                )
-                metadata = notification_result.scalar_one_or_none()
-                if metadata:
-                    notification_metadata = metadata
-            except Exception as e:
-                logger.warning(f"Could not fetch notification metadata for {notification_id}: {e}")
+        # Get metadata if notification exists
+        metadata = await self.get_notification_metadata(notification_id)
         
-        data = {
-            "placeholder": entity.some_field,
-            # ... other template variables from entity
+        return {
+            "placeholder": entity.field,
+            **metadata  # Custom data overrides defaults
         }
-        
-        # Merge any additional metadata
-        if notification_metadata:
-            data.update({k: v for k, v in notification_metadata.items() if k not in data})
-        
-        return data
 
-def create_new_entity_service(db_session, notification_code: str) -> NewEntityNotificationService:
-    return NewEntityNotificationService(db_session, notification_code)
+def create_new_service(db_session, notification_code):
+    return NewNotificationService(db_session, notification_code)
 ```
 
-### Registry Update
-
-Import and add factory function to `registry.py`:
-
+### 3. Register Service
 ```python
-from .new_entity_service import create_new_entity_service
+# registry.py
+from .new_service import create_new_service
 
-# Add to _factories dict
 _factories = {
-    # ... existing factories
-    "new_notification_type": create_new_entity_service,
+    # ... existing
+    "new_type": create_new_service,
 }
-```
-
-## Error Handling
-
-Common exceptions thrown:
-
-- **`ValueError`**: Invalid notification code or entity not found
-- **Database exceptions**: SQLAlchemy exceptions for database errors
-- **Template errors**: `KeyError` for missing template variables
-
-```python
-try:
-    await create_notification("invalid_code", entity_id, "user", [user_id], db)
-except ValueError as e:
-    logger.error(f"Invalid notification type: {e}")
-except Exception as e:
-    logger.error(f"Notification creation failed: {e}")
-```
-
-## Performance Notes
-
-### Caching
-- Notification types are cached per service instance
-- Templates are fetched on-demand
-
-### Batch Operations
-```python
-# Create notifications for multiple recipients
-recipient_ids = [user1_id, user2_id, user3_id]
-await create_notification(
-    "program_requirement_warn",
-    schedule_id,
-    "system", 
-    recipient_ids,
-    db_session
-)
-```
-
-### Database Queries
-- Services use `selectinload` for efficient joins
-- Single query per entity type regardless of template complexity
-
-## Testing
-
-### Unit Tests
-```python
-import pytest
-from app.services.notifications import create_notification
-
-@pytest.mark.asyncio
-async def test_create_certificate_notification(db_session, sample_submission):
-    notification_id = await create_notification(
-        "certificate_submission_submit",
-        sample_submission.id,
-        "user",
-        [sample_submission.student.user.id],
-        db_session
-    )
-    assert notification_id is not None
-```
-
-### Integration Tests
-```python
-@pytest.mark.asyncio
-async def test_notification_message_formatting(db_session, sample_submission):
-    message = await get_notification_message(
-        "certificate_submission_submit",
-        sample_submission.id,
-        "in_app", 
-        db_session
-    )
-    
-    assert "subject" in message
-    assert "body" in message
-    assert sample_submission.certificate_type.name in message["body"]
-```
-
-## Monitoring
-
-### Logging
-Operations are logged with appropriate levels:
-
-```python
-# Successful operations
-logger.info(f"Created notification {notification_id} for {notification_code}")
-
-# Warnings for recoverable issues  
-logger.warning(f"No service found for notification code: {notification_code}")
-
-# Errors for failures
-logger.error(f"Failed to create notification: {e}", exc_info=True)
-```
-
-### Metrics to Track
-- Notification creation success/failure rates
-- Template formatting errors
-- User notification read rates
-- Channel delivery success rates
-
-## Migration from Legacy System
-
-This refactored system maintains backward compatibility through:
-
-1. **Same database schema**: No changes to existing tables
-2. **Equivalent functionality**: All previous features preserved
-3. **Streamlined API**: Reduced from multiple complex functions to 3 main functions
-
-### Code Migration
-
-**Before:**
-```python
-from app.services.notifications.certificate_submission_notification_service import CertificateSubmissionSubmitNotificationService
-
-service = CertificateSubmissionSubmitNotificationService(db_session)
-await service.create(entity_id, "user", [user_id])
-```
-
-**After:**
-```python
-from app.services.notifications import create_notification
-
-await create_notification("certificate_submission_submit", entity_id, "user", [user_id], db_session)
 ```
 
 ## Troubleshooting
@@ -441,21 +228,19 @@ await create_notification("certificate_submission_submit", entity_id, "user", [u
 ### Common Issues
 
 **"No service found for notification code"**
-- Check notification code spelling
-- Verify code exists in registry `_factories` dict
-- Ensure database has corresponding `notification_types` record
+- Check spelling of notification_code
+- Verify code exists in registry._factories
+- Ensure database has notification_types record
 
-**"Template formatting error: missing placeholder"**
-- Check template uses correct variable names
-- Verify entity service returns all required template variables
-- Use debug logging to inspect `notification_data` dict
+**"Template formatting error"** 
+- Check template placeholders match service data
+- Use logger.debug() to see notification_data
 
-**"Notification type not found in database"**
-- Run database seeding to create notification types
-- Check `notification_types` table has record with matching code
-- Verify database connection and permissions
+**"Task retries exhausted"**
+- Check database connectivity
+- Monitor Celery worker logs
+- Verify async session management
 
-**"Failed to create notification recipients"**
-- Check recipient user IDs exist in database
-- Verify foreign key constraints
-- Check database transaction handling
+**"Session leak warnings"**
+- Ensure proper async context managers
+- Check finally blocks close sessions

@@ -1,102 +1,82 @@
-from typing import Dict, Any, Optional, List
+from typing import List, Optional
+from datetime import datetime
 import uuid
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from .registry import NotificationServiceRegistry
 from app.utils.logging import get_logger
 
 logger = get_logger()
 
 
-async def get_notification_message(
-    notification_id: uuid.UUID,
-    notification_code: str,
-    entity_id: uuid.UUID,
-    db_session: AsyncSession,
-    channel_type: str = "in_app",
-) -> Optional[Dict[str, str]]:
-    """Get formatted notification message"""
-    try:
-        service = NotificationServiceRegistry.create_service(
-            notification_code, db_session
-        )
-        if not service:
-            return None
-
-        notification_data = await service.get_notification_data(
-            entity_id, notification_id
-        )
-        message = await service.construct_message(channel_type, notification_data)
-
-        logger.info(f"Generated message for {notification_code}, entity {entity_id}")
-        return message
-
-    except Exception as e:
-        logger.error(f"Failed to get notification message: {e}")
-        return None
-
-
-async def create_notification(
+def create_notification_async(
+    request_id: str,
     notification_code: str,
     entity_id: uuid.UUID,
     actor_type: str,
     recipient_ids: List[uuid.UUID],
-    db_session: AsyncSession,
     actor_id: Optional[uuid.UUID] = None,
-    **kwargs,
-) -> Optional[uuid.UUID]:
-    """Create notification - simplified one-line function"""
+    scheduled_for: Optional[datetime] = None,
+    expires_at: Optional[datetime] = None,
+    in_app_enabled: bool = True,
+    line_app_enabled: bool = False,
+    **metadata
+) -> str:
+    """
+    Create notification asynchronously via Celery task.
+    
+    Simple helper function to trigger notification creation without complex logic.
+    
+    Args:
+        request_id: Request ID for tracking
+        notification_code: Code identifying the notification type
+        entity_id: UUID of the entity the notification is about
+        actor_type: Type of actor triggering the notification
+        recipient_ids: List of recipient UUIDs
+        actor_id: Optional UUID of the actor
+        scheduled_for: Optional datetime for scheduling
+        expires_at: Optional datetime for expiration
+        in_app_enabled: Whether in-app notifications are enabled
+        line_app_enabled: Whether LINE notifications are enabled
+        **metadata: Additional metadata for the notification
+        
+    Returns:
+        str: Celery task ID
+    """
     try:
-        service = NotificationServiceRegistry.create_service(
-            notification_code, db_session
-        )
-        if not service:
-            logger.warning(
-                f"No service found for notification code: {notification_code}"
-            )
-            return None
+        from app.tasks.notification_creation import create_notification_task
 
-        notification_id = await service.create(
-            entity_id=entity_id,
-            actor_type=actor_type,
-            recipient_ids=recipient_ids,
-            actor_id=actor_id,
-            **kwargs,
-        )
-
-        logger.info(f"Created notification {notification_id} for {notification_code}")
-        return notification_id
-
-    except Exception as e:
-        logger.error(f"Failed to create notification: {e}")
-        return None
-
-
-async def get_user_notifications_summary(
-    user_id: uuid.UUID, db_session: AsyncSession, limit: int = 10
-) -> Dict[str, Any]:
-    """Get user notifications summary for dashboard"""
-    from .user_notifications import UserNotificationService
-
-    try:
-        service = UserNotificationService(db_session)
-        unread_count = await service.get_unread_count(user_id)
-        recent_notifications = await service.get_user_notifications(
-            user_id=user_id, limit=limit, unread_only=False
-        )
-
-        return {
-            "unread_count": unread_count,
-            "recent_notifications": recent_notifications[:limit],
-            "has_more": len(recent_notifications) == limit,
+        task_args = {
+            "request_id": request_id,
+            "notification_code": notification_code,
+            "entity_id": str(entity_id),
+            "actor_type": actor_type,
+            "recipient_ids": [str(rid) for rid in recipient_ids],
+            "actor_id": str(actor_id) if actor_id else None,
+            "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
+            "expires_at": expires_at.isoformat() if expires_at else None,
+            "in_app_enabled": in_app_enabled,
+            "line_app_enabled": line_app_enabled,
+            **metadata,
         }
 
+        # Use Celery task for async processing
+        result = create_notification_task.delay(**task_args)
+        
+        logger.info(
+            "Notification creation task triggered",
+            task_id=result.id,
+            notification_code=notification_code,
+            entity_id=str(entity_id),
+            recipient_count=len(recipient_ids),
+        )
+        
+        return result.id
+
     except Exception as e:
-        logger.error(f"Failed to get user notifications summary: {e}")
-        return {
-            "unread_count": 0,
-            "recent_notifications": [],
-            "has_more": False,
-            "error": "Failed to load notifications",
-        }
+        logger.error(
+            "Failed to trigger notification creation",
+            notification_code=notification_code,
+            entity_id=str(entity_id),
+            error=str(e),
+            exc_info=True,
+        )
+        raise
