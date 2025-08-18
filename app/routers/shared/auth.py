@@ -13,7 +13,7 @@ from app.config.settings import settings
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import AuthenticationError
 
-auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
+auth_router = APIRouter()
 
 
 @auth_router.post("/login")

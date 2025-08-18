@@ -165,7 +165,7 @@ class UserNotificationService:
             raise RuntimeError("USER_NOTIFICATIONS_RETRIEVAL_FAILED")
 
     async def get_unread_count(self, user_id: uuid.UUID) -> int:
-        """Get count of unread notifications for a user"""
+        """Get count of unread delivered notifications for a user"""
         try:
             from sqlalchemy import func
 
@@ -173,6 +173,7 @@ class UserNotificationService:
                 select(func.count(NotificationRecipient.id)).where(
                     and_(
                         NotificationRecipient.recipient_id == user_id,
+                        NotificationRecipient.status == NotificationStatus.DELIVERED,
                         NotificationRecipient.read_at.is_(None),
                         NotificationRecipient.in_app_enabled.is_(True),
                     )
@@ -261,6 +262,52 @@ class UserNotificationService:
             await self.db.rollback()
             logger.error(
                 f"Failed to mark all notifications as read for user {user_id}: {str(e)}",
+                exc_info=True,
+            )
+            return 0
+
+    async def get_unread_notifications(
+        self, user_id: uuid.UUID, limit: int = 50, offset: int = 0
+    ) -> List[Dict[str, Any]]:
+        """Get only delivered but unread notifications for a user"""
+        return await self.get_user_notifications(
+            user_id=user_id,
+            status_filter=NotificationStatus.DELIVERED,
+            limit=limit,
+            offset=offset,
+            unread_only=True,
+        )
+
+    async def clear_all_notifications(self, user_id: uuid.UUID) -> int:
+        """Clear all notifications by marking them as expired (they won't show up in client)"""
+        try:
+            from sqlalchemy import update
+
+            # Update all non-expired notifications for the user to expired status
+            result = await self.db.execute(
+                update(NotificationRecipient)
+                .where(
+                    and_(
+                        NotificationRecipient.recipient_id == user_id,
+                        NotificationRecipient.status != NotificationStatus.EXPIRED,
+                    )
+                )
+                .values(status=NotificationStatus.EXPIRED)
+                .execution_options(synchronize_session=False)
+            )
+
+            await self.db.commit()
+            updated_count = result.rowcount
+
+            logger.info(
+                f"Cleared {updated_count} notifications for user {user_id}"
+            )
+            return updated_count
+
+        except Exception as e:
+            await self.db.rollback()
+            logger.error(
+                f"Failed to clear notifications for user {user_id}: {str(e)}",
                 exc_info=True,
             )
             return 0

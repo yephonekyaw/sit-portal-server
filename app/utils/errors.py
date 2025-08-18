@@ -48,6 +48,17 @@ class AuthorizationError(Exception):
         self.error_code = error_code
 
 
+class NotFoundError(Exception):
+    """Custom exception for resource not found errors."""
+
+    def __init__(
+        self, message: str = "Resource not found", error_code: str = "NOT_FOUND"
+    ):
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+
+
 def setup_error_handlers(app: FastAPI):
     """Setup custom error handlers."""
 
@@ -188,6 +199,19 @@ def setup_error_handlers(app: FastAPI):
             error_code="FORBIDDEN",
             status_code=status.HTTP_403_FORBIDDEN,
             meta={"error_type": "AUTHORIZATION_ERROR"},
+        )
+
+
+    @app.exception_handler(NotFoundError)
+    async def not_found_exception_handler(request: Request, exc: NotFoundError):
+        logger.error(f"Not Found Error: {exc.message}")
+
+        return ResponseBuilder.error(
+            request=request,
+            message=exc.message,
+            error_code=exc.error_code,
+            status_code=status.HTTP_404_NOT_FOUND,
+            meta={"error_type": "NOT_FOUND_ERROR"},
         )
 
     @app.exception_handler(ValueError)
