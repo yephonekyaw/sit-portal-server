@@ -34,9 +34,11 @@ notifications/
 └── user_notifications.py # User-facing notifications
 
 tasks/
-├── notification_creation.py    # Step 1: Create notification
-├── notification_processing.py  # Step 2: Process and dispatch
-└── line_notification_sender.py # Step 3: LINE delivery
+├── notification_creation.py         # Step 1: Create notification
+├── notification_processing.py       # Step 2: Process and dispatch
+├── line_notification_sender.py      # Step 3: LINE delivery
+├── daily_scheduled_processor.py     # Daily: Process scheduled notifications
+└── daily_notification_expiration.py # Daily: Mark expired notifications
 ```
 
 ## Notification Flow
@@ -81,6 +83,26 @@ task_id = create_notification_async(
 - Validates recipient has LINE configured
 - Calls mock LINE API (95% success rate)
 
+## Scheduled Tasks
+
+### 5. Daily Scheduled Processor (daily_scheduled_processor.py)
+
+**Purpose**: Process notifications scheduled for current day
+- **Schedule**: Runs daily at 9:00 AM Bangkok time
+- **Query**: Finds notifications with `scheduled_for` = today
+- **Filter**: Only PENDING recipients, not expired
+- **Action**: Triggers `process_notification_task` for each notification
+- **Retry**: 3 attempts with exponential backoff (max 5 min delay)
+
+### 6. Daily Notification Expiration (daily_notification_expiration.py)
+
+**Purpose**: Mark expired notifications as EXPIRED
+- **Schedule**: Runs daily at 00:05 AM Bangkok time  
+- **Query**: Finds notifications with `expires_at` <= current datetime
+- **Action**: Updates PENDING recipients to EXPIRED status directly
+- **Commit**: Batch database update for efficiency
+- **Retry**: 3 attempts with exponential backoff (max 5 min delay)
+
 ## Notification Types
 
 ### Certificate Submissions
@@ -123,6 +145,8 @@ Body: Dear {student_name}, your {certificate_name} has been {status}.
 - Creation: 3 retries, max 5 min delay
 - Processing: 3 retries, max 5 min delay
 - LINE delivery: 5 retries, max 10 min delay
+- Scheduled processor: 3 retries, max 5 min delay
+- Expiration task: 3 retries, max 5 min delay
 
 ## Usage Examples
 

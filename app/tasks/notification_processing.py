@@ -1,5 +1,3 @@
-import asyncio
-from typing import Optional
 from datetime import datetime, timezone
 import uuid
 
@@ -29,11 +27,6 @@ async def process_notification_task(self, request_id: str, notification_id: str)
     db_session: AsyncSession | None = None
 
     try:
-        logger.info(
-            "Starting notification processing task",
-            notification_id=notification_id,
-            request_id=request_id,
-        )
 
         # Get async database session using context manager
         async for db_session in get_async_session():
@@ -74,11 +67,6 @@ async def process_notification_task(self, request_id: str, notification_id: str)
         if notification.expires_at and notification.expires_at <= datetime.now(
             timezone.utc
         ):
-            logger.info(
-                "Notification has expired, marking as expired",
-                notification_id=notification_id,
-                expires_at=notification.expires_at.isoformat(),
-            )
 
             # Mark all pending recipients as expired
             for recipient in notification.recipients:
@@ -122,11 +110,6 @@ async def process_notification_task(self, request_id: str, notification_id: str)
 
         await db_session.commit()
 
-        logger.info(
-            "Notification processing completed",
-            notification_id=notification_id,
-            tasks_created=tasks_created,
-        )
 
         return {
             "success": True,
@@ -149,9 +132,6 @@ async def process_notification_task(self, request_id: str, notification_id: str)
 
         # Retry with exponential backoff for transient errors
         if self.request.retries < self.max_retries:
-            logger.info(
-                f"Retrying notification processing task (attempt {self.request.retries + 1}/{self.max_retries})"
-            )
             # Cap retry delay at 5 minutes
             retry_delay = min(2**self.request.retries * 30, 300)
             raise self.retry(countdown=retry_delay)

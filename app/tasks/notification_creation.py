@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional, List
 from datetime import datetime, timezone
 import uuid
@@ -49,13 +48,6 @@ async def create_notification_task(
     db_session: AsyncSession | None = None
 
     try:
-        logger.info(
-            "Starting notification creation task",
-            notification_code=notification_code,
-            entity_id=entity_id,
-            recipient_count=len(recipient_ids),
-            request_id=request_id,
-        )
 
         # Get async database session using context manager
         async for db_session in get_async_session():
@@ -115,20 +107,10 @@ async def create_notification_task(
         )
 
         if notification_id:
-            logger.info(
-                "Notification creation task completed successfully",
-                notification_id=str(notification_id),
-                notification_code=notification_code,
-                recipient_count=len(recipient_ids),
-            )
 
             # If notification is scheduled for future, don't process immediately
             if scheduled_for_dt and scheduled_for_dt > datetime.now(timezone.utc):
-                logger.info(
-                    "Notification scheduled for future delivery",
-                    notification_id=str(notification_id),
-                    scheduled_for=scheduled_for,
-                )
+                pass
             else:
                 # Trigger immediate processing for non-scheduled notifications
                 from app.tasks.notification_processing import process_notification_task
@@ -171,9 +153,6 @@ async def create_notification_task(
 
         # Retry with exponential backoff for transient errors
         if self.request.retries < self.max_retries:
-            logger.info(
-                f"Retrying notification creation task (attempt {self.request.retries + 1}/{self.max_retries})"
-            )
             # Cap retry delay at 5 minutes
             retry_delay = min(2**self.request.retries * 60, 300)
             raise self.retry(countdown=retry_delay)

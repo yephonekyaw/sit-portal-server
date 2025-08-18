@@ -1,5 +1,3 @@
-import asyncio
-from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.celery import celery
@@ -21,11 +19,6 @@ async def verify_certificate_task(self, request_id: str, submission_id: str):
     db_session: AsyncSession | None = None
 
     try:
-        logger.info(
-            "Starting certificate verification task",
-            submission_id=submission_id,
-            request_id=request_id,
-        )
 
         # Get async database session using context manager
         async for db_session in get_async_session():
@@ -47,15 +40,7 @@ async def verify_certificate_task(self, request_id: str, submission_id: str):
             submission_id=submission_id,
         )
 
-        if result["success"]:
-            logger.info(
-                "Certificate verification task completed",
-                submission_id=submission_id,
-                decision=result.get("validation_decision"),
-                confidence=result.get("confidence_level"),
-                score=result.get("overall_score"),
-            )
-        else:
+        if not result["success"]:
             logger.error(
                 "Certificate verification task failed",
                 submission_id=submission_id,

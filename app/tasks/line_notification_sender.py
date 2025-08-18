@@ -1,4 +1,3 @@
-import asyncio
 from typing import Optional
 from datetime import datetime, timezone
 import uuid
@@ -40,12 +39,6 @@ async def send_line_notification_task(
     db_session: AsyncSession | None = None
 
     try:
-        logger.info(
-            "Starting LINE notification sending task",
-            notification_id=notification_id,
-            recipient_id=recipient_id,
-            request_id=request_id,
-        )
 
         # Get async database session using context manager
         async for db_session in get_async_session():
@@ -177,11 +170,6 @@ async def send_line_notification_task(
             recipient.delivered_at = datetime.now(timezone.utc)
             await db_session.commit()
 
-            logger.info(
-                "LINE notification sent successfully",
-                notification_id=notification_id,
-                recipient_id=recipient_id,
-            )
 
             return {
                 "success": True,
@@ -196,9 +184,6 @@ async def send_line_notification_task(
             await db_session.commit()
 
             if self.request.retries < self.max_retries:
-                logger.info(
-                    f"Retrying LINE notification (attempt {self.request.retries + 1}/{self.max_retries})"
-                )
                 # Cap retry delay at 10 minutes
                 retry_delay = min(2**self.request.retries * 120, 600)
                 raise self.retry(countdown=retry_delay)
@@ -224,9 +209,6 @@ async def send_line_notification_task(
 
         # Retry for transient errors
         if self.request.retries < self.max_retries:
-            logger.info(
-                f"Retrying LINE notification task (attempt {self.request.retries + 1}/{self.max_retries})"
-            )
             # Cap retry delay at 10 minutes
             retry_delay = min(2**self.request.retries * 120, 600)
             raise self.retry(countdown=retry_delay)
@@ -327,12 +309,6 @@ async def _mock_send_line_message(
         bool: True if successful, False if failed
     """
 
-    logger.info(
-        "MOCK: Sending LINE message",
-        line_user_id=line_user_id,
-        subject=subject,
-        body_length=len(body),
-    )
 
     # Simulate network delay (removed for performance)
     # await asyncio.sleep(1)
@@ -340,12 +316,7 @@ async def _mock_send_line_message(
     # Simulate 95% success rate
     success = random.random() > 0.05
 
-    if success:
-        logger.info(
-            "MOCK: LINE message sent successfully",
-            line_user_id=line_user_id,
-        )
-    else:
+    if not success:
         logger.warning(
             "MOCK: LINE message failed to send",
             line_user_id=line_user_id,
