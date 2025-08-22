@@ -416,7 +416,7 @@ class ProgramRequirement(Base, AuditMixin):
     effective_until_year: Mapped[Optional[str]] = mapped_column(
         String(10)
     )  # Up to this academic year
-    months_before_deadline: Mapped[Optional[int]] = mapped_column(Integer)
+    months_before_deadline: Mapped[Optional[int]] = mapped_column(Integer, default=1)
 
     # Relationships
     program: Mapped["Program"] = relationship(back_populates="program_requirements")

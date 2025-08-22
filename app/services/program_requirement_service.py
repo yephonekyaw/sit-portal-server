@@ -32,7 +32,9 @@ class ProgramRequirementServiceProvider:
         self.db = db_session
 
     # Core CRUD Operations
-    async def get_requirement_by_id(self, requirement_id: uuid.UUID) -> Optional[ProgramRequirement]:
+    async def get_requirement_by_id(
+        self, requirement_id: uuid.UUID
+    ) -> Optional[ProgramRequirement]:
         """Get program requirement by ID or return None if not found"""
         result = await self.db.execute(
             select(ProgramRequirement).where(ProgramRequirement.id == requirement_id)
@@ -73,7 +75,8 @@ class ProgramRequirementServiceProvider:
                 target_year=requirement_data.target_year,
                 deadline_date=deadline_date,
                 grace_period_days=requirement_data.grace_period_days or 7,
-                notification_days_before_deadline=requirement_data.notification_days_before_deadline or 90,
+                notification_days_before_deadline=requirement_data.notification_days_before_deadline
+                or 90,
                 is_mandatory=requirement_data.is_mandatory,
                 is_active=requirement_data.is_active,
                 special_instruction=requirement_data.special_instruction,
@@ -109,7 +112,9 @@ class ProgramRequirementServiceProvider:
                 raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to create program requirement: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to create program requirement: {str(e)}", exc_info=True
+            )
             raise RuntimeError("PROGRAM_REQUIREMENT_CREATION_FAILED")
 
     async def archive_requirement(self, requirement_id: uuid.UUID) -> Dict[str, Any]:
@@ -133,8 +138,10 @@ class ProgramRequirementServiceProvider:
 
             # Update effective_until_year if needed
             if latest_academic_year:
-                if (requirement.effective_until_year is None or 
-                    requirement.effective_until_year > latest_academic_year):
+                if (
+                    requirement.effective_until_year is None
+                    or requirement.effective_until_year > latest_academic_year
+                ):
                     requirement.effective_until_year = latest_academic_year
                     logger.info(
                         f"Updated effective_until_year to {latest_academic_year} for requirement {requirement.name}"
@@ -155,11 +162,15 @@ class ProgramRequirementServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to archive program requirement: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to archive program requirement: {str(e)}", exc_info=True
+            )
             raise RuntimeError("PROGRAM_REQUIREMENT_ARCHIVE_FAILED")
 
     async def update_requirement(
-        self, requirement_id: uuid.UUID, requirement_data: UpdateProgramRequirementRequest
+        self,
+        requirement_id: uuid.UUID,
+        requirement_data: UpdateProgramRequirementRequest,
     ) -> Dict[str, Any]:
         """Update an existing program requirement with comprehensive validation"""
         # Get the existing requirement
@@ -183,15 +194,21 @@ class ProgramRequirementServiceProvider:
         )
 
         # Validate effective_from_year
-        if (requirement_data.effective_from_year and oldest_academic_year and
-            requirement_data.effective_from_year < oldest_academic_year):
+        if (
+            requirement_data.effective_from_year
+            and oldest_academic_year
+            and requirement_data.effective_from_year < oldest_academic_year
+        ):
             raise ValueError(
                 f"EFFECTIVE_FROM_YEAR_TOO_EARLY: effective_from_year ({requirement_data.effective_from_year}) cannot be earlier than the oldest academic year ({oldest_academic_year})"
             )
 
         # Validate effective_until_year
-        if (requirement_data.effective_until_year and latest_schedule_academic_year and
-            requirement_data.effective_until_year > latest_schedule_academic_year):
+        if (
+            requirement_data.effective_until_year
+            and latest_schedule_academic_year
+            and requirement_data.effective_until_year > latest_schedule_academic_year
+        ):
             raise ValueError(
                 f"EFFECTIVE_UNTIL_YEAR_TOO_LATE: effective_until_year ({requirement_data.effective_until_year}) cannot be later than the latest academic year with created schedules ({latest_schedule_academic_year})"
             )
@@ -207,7 +224,9 @@ class ProgramRequirementServiceProvider:
             requirement.target_year = requirement_data.target_year
             requirement.deadline_date = deadline_date
             requirement.grace_period_days = requirement_data.grace_period_days or 7
-            requirement.notification_days_before_deadline = requirement_data.notification_days_before_deadline or 90
+            requirement.notification_days_before_deadline = (
+                requirement_data.notification_days_before_deadline or 90
+            )
             requirement.is_mandatory = requirement_data.is_mandatory
             requirement.special_instruction = requirement_data.special_instruction
             requirement.recurrence_type = requirement_data.recurrence_type
@@ -232,23 +251,29 @@ class ProgramRequirementServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to update program requirement: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to update program requirement: {str(e)}", exc_info=True
+            )
             raise RuntimeError("PROGRAM_REQUIREMENT_UPDATE_FAILED")
 
-    async def get_requirement_details(self, requirement_id: uuid.UUID) -> Dict[str, Any]:
+    async def get_requirement_details(
+        self, requirement_id: uuid.UUID
+    ) -> Dict[str, Any]:
         """Get comprehensive program requirement details with related data"""
         # Build complex query to get all required data
         schedule_stats_subquery = (
             select(
                 ProgramRequirementSchedule.program_requirement_id,
                 func.count(ProgramRequirementSchedule.id).label("schedules_count"),
-                func.max(ProgramRequirementSchedule.submission_deadline).label("latest_schedule_deadline")
+                func.max(ProgramRequirementSchedule.submission_deadline).label(
+                    "latest_schedule_deadline"
+                ),
             )
             .where(ProgramRequirementSchedule.program_requirement_id == requirement_id)
             .group_by(ProgramRequirementSchedule.program_requirement_id)
             .subquery()
         )
-        
+
         # Main query joining all required tables
         main_query = (
             select(
@@ -269,38 +294,40 @@ class ProgramRequirementServiceProvider:
                 ProgramRequirement.months_before_deadline,
                 ProgramRequirement.created_at,
                 ProgramRequirement.updated_at,
-                
                 # Program fields
                 ProgramRequirement.program_id,
                 Program.program_code,
                 Program.program_name,
-                
                 # Certificate type fields
                 ProgramRequirement.cert_type_id,
                 CertificateType.code.label("cert_code"),
                 CertificateType.name.label("cert_name"),
-                
                 # Schedule statistics
-                func.coalesce(schedule_stats_subquery.c.schedules_count, 0).label("schedules_count"),
-                schedule_stats_subquery.c.latest_schedule_deadline
+                func.coalesce(schedule_stats_subquery.c.schedules_count, 0).label(
+                    "schedules_count"
+                ),
+                schedule_stats_subquery.c.latest_schedule_deadline,
             )
             .join(Program, ProgramRequirement.program_id == Program.id)
-            .join(CertificateType, ProgramRequirement.cert_type_id == CertificateType.id)
+            .join(
+                CertificateType, ProgramRequirement.cert_type_id == CertificateType.id
+            )
             .outerjoin(
-                schedule_stats_subquery, 
-                ProgramRequirement.id == schedule_stats_subquery.c.program_requirement_id
+                schedule_stats_subquery,
+                ProgramRequirement.id
+                == schedule_stats_subquery.c.program_requirement_id,
             )
             .where(ProgramRequirement.id == requirement_id)
         )
-        
+
         try:
             # Execute the query
             result = await self.db.execute(main_query)
             requirement_data = result.first()
-            
+
             if not requirement_data:
                 raise ValueError("PROGRAM_REQUIREMENT_NOT_FOUND")
-            
+
             # Create response using the comprehensive schema
             response_data = ProgramRequirementDetailResponse(
                 # Program requirement fields
@@ -320,54 +347,60 @@ class ProgramRequirementServiceProvider:
                 months_before_deadline=requirement_data.months_before_deadline,
                 created_at=requirement_data.created_at,
                 updated_at=requirement_data.updated_at,
-                
                 # Program information
                 program_id=requirement_data.program_id,
                 program_code=requirement_data.program_code,
                 program_name=requirement_data.program_name,
-                
                 # Certificate type information
                 cert_type_id=requirement_data.cert_type_id,
                 cert_code=requirement_data.cert_code,
                 cert_name=requirement_data.cert_name,
-                
                 # Schedule statistics
                 schedules_count=requirement_data.schedules_count,
-                latest_schedule_deadline=requirement_data.latest_schedule_deadline
+                latest_schedule_deadline=requirement_data.latest_schedule_deadline,
             )
-            
-            logger.info(f"Retrieved program requirement details: {requirement_data.name}")
-            
+
+            logger.info(
+                f"Retrieved program requirement details: {requirement_data.name}"
+            )
+
             return response_data.model_dump()
 
         except Exception as e:
-            logger.error(f"Failed to retrieve program requirement details: {str(e)}", exc_info=True)
+            logger.error(
+                f"Failed to retrieve program requirement details: {str(e)}",
+                exc_info=True,
+            )
             raise RuntimeError("PROGRAM_REQUIREMENT_RETRIEVAL_FAILED")
 
     # Helper Methods
-    async def _validate_program_exists_and_active(self, program_id: uuid.UUID) -> Program:
+    async def _validate_program_exists_and_active(
+        self, program_id: uuid.UUID
+    ) -> Program:
         """Validate that program exists and is active"""
         result = await self.db.execute(select(Program).where(Program.id == program_id))
         program = result.scalar_one_or_none()
-        
+
         if not program:
             raise ValueError("PROGRAM_NOT_FOUND")
-        
+
         if not program.is_active:
             raise ValueError("PROGRAM_NOT_ACTIVE")
-        
+
         return program
 
-    async def _validate_certificate_type_exists_and_active(self, cert_type_id: uuid.UUID):
+    async def _validate_certificate_type_exists_and_active(
+        self, cert_type_id: uuid.UUID
+    ):
         """Validate that certificate type exists and is active"""
         result = await self.db.execute(
             select(CertificateType).where(CertificateType.id == cert_type_id)
         )
         cert_type = result.scalar_one_or_none()
-        
+
         if not cert_type:
             raise ValueError("CERTIFICATE_TYPE_NOT_FOUND")
-        
+
         if not cert_type.is_active:
             raise ValueError("CERTIFICATE_TYPE_NOT_ACTIVE")
 
@@ -380,11 +413,16 @@ class ProgramRequirementServiceProvider:
         )
         return result.scalar_one_or_none()
 
-    async def _get_latest_schedule_academic_year(self, requirement_id: uuid.UUID) -> Optional[str]:
+    async def _get_latest_schedule_academic_year(
+        self, requirement_id: uuid.UUID
+    ) -> Optional[str]:
         """Get the latest academic year for which schedules have been created"""
         result = await self.db.execute(
             select(AcademicYear.year_code)
-            .join(ProgramRequirementSchedule, AcademicYear.id == ProgramRequirementSchedule.academic_year_id)
+            .join(
+                ProgramRequirementSchedule,
+                AcademicYear.id == ProgramRequirementSchedule.academic_year_id,
+            )
             .where(ProgramRequirementSchedule.program_requirement_id == requirement_id)
             .order_by(desc(AcademicYear.year_code))
             .limit(1)

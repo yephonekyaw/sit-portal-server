@@ -2,9 +2,257 @@ from typing import List, Optional
 from datetime import datetime
 import uuid
 
+from sqlalchemy import and_, or_
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+from sqlalchemy.future import select
+
+from app.db.models import (
+    Student,
+    Staff,
+    ProgramRequirementSchedule,
+    CertificateSubmission,
+    Program,
+    Permission,
+    Role,
+    StaffPermission,
+    SubmissionStatus,
+)
 from app.utils.logging import get_logger
 
 logger = get_logger()
+
+
+async def get_student_user_ids_for_requirement_schedule(
+    db: AsyncSession, requirement_schedule_id: uuid.UUID
+) -> List[uuid.UUID]:
+    """
+    Get user IDs of students who haven't submitted or whose submissions
+    are not yet approved for a specific program requirement schedule.
+
+    Args:
+        db: Database session
+        requirement_schedule_id: ID of the ProgramRequirementSchedule
+
+    Returns:
+        List of user IDs of students who need to submit or have non-approved submissions
+    """
+    try:
+        # First get the requirement schedule to understand the program and academic year
+        requirement_schedule_stmt = (
+            select(ProgramRequirementSchedule)
+            .where(ProgramRequirementSchedule.id == requirement_schedule_id)
+            .options(selectinload(ProgramRequirementSchedule.program_requirement))
+        )
+
+        result = await db.execute(requirement_schedule_stmt)
+        requirement_schedule = result.scalar_one_or_none()
+
+        if not requirement_schedule:
+            logger.warning(
+                f"ProgramRequirementSchedule not found: {requirement_schedule_id}"
+            )
+            return []
+
+        program_id = requirement_schedule.program_requirement.program_id
+        academic_year_id = requirement_schedule.academic_year_id
+
+        # Get all students in the program for the academic year
+        students_stmt = (
+            select(Student)
+            .where(
+                and_(
+                    Student.program_id == program_id,
+                    Student.academic_year_id == academic_year_id,
+                )
+            )
+            .options(selectinload(Student.user))
+        )
+
+        students_result = await db.execute(students_stmt)
+        all_students = students_result.scalars().all()
+
+        # Get students who have approved submissions for this requirement schedule
+        approved_submissions_stmt = select(CertificateSubmission.student_id).where(
+            and_(
+                CertificateSubmission.requirement_schedule_id
+                == requirement_schedule_id,
+                CertificateSubmission.submission_status == SubmissionStatus.APPROVED,
+            )
+        )
+
+        approved_result = await db.execute(approved_submissions_stmt)
+        approved_student_ids = {row[0] for row in approved_result.fetchall()}
+
+        # Filter out students who already have approved submissions
+        target_student_user_ids = []
+        for student in all_students:
+            if student.id not in approved_student_ids:
+                target_student_user_ids.append(student.user_id)
+
+        logger.info(
+            f"Found {len(target_student_user_ids)} students needing submission for requirement schedule {requirement_schedule_id}"
+        )
+
+        return target_student_user_ids
+
+    except Exception as e:
+        logger.error(
+            f"Error getting student user IDs for requirement schedule {requirement_schedule_id}: {str(e)}",
+            exc_info=True,
+        )
+        return []
+
+
+async def get_staff_user_ids_by_program_and_role(
+    db: AsyncSession, program_code: str, role_name: Optional[str] = None
+) -> List[uuid.UUID]:
+    """
+    Get user IDs of staff members responsible for a particular program
+    and who have certain permissions/roles.
+
+    Args:
+        db: Database session
+        program_code: Code of the program
+        role_name: Optional role name to filter by
+
+    Returns:
+        List of user IDs of staff members
+    """
+    try:
+        # Build the query step by step
+        query = (
+            select(Staff)
+            .join(Staff.user)
+            .join(StaffPermission, Staff.id == StaffPermission.staff_id)
+            .join(Permission, StaffPermission.permission_id == Permission.id)
+            .join(Program, Permission.program_id == Program.id)
+            .where(
+                and_(
+                    Program.program_code == program_code,
+                    StaffPermission.is_active == True,
+                )
+            )
+            .options(selectinload(Staff.user))
+        )
+
+        # Add role filter if provided
+        if role_name:
+            query = query.join(Role, Permission.role_id == Role.id).where(
+                Role.name == role_name
+            )
+
+        result = await db.execute(query)
+        staff_members = result.scalars().unique().all()
+
+        staff_user_ids = [staff.user_id for staff in staff_members]
+
+        logger.info(
+            f"Found {len(staff_user_ids)} staff members for program {program_code}"
+            + (f" with role {role_name}" if role_name else "")
+        )
+
+        return staff_user_ids
+
+    except Exception as e:
+        logger.error(
+            f"Error getting staff user IDs for program {program_code}, role {role_name}: {str(e)}",
+            exc_info=True,
+        )
+        return []
+
+
+async def get_user_id_from_student_identifier(
+    db: AsyncSession, identifier: str
+) -> Optional[uuid.UUID]:
+    """
+    Get user_id from student identifier (student ID, roll_number, or sit_email).
+
+    Args:
+        db: Database session
+        identifier: Student ID (UUID string), roll_number, or sit_email
+
+    Returns:
+        User ID if found, None otherwise
+    """
+    try:
+        # Try to parse as UUID first (student.id)
+        try:
+            student_uuid = uuid.UUID(identifier)
+            stmt = select(Student.user_id).where(Student.id == student_uuid)
+            result = await db.execute(stmt)
+            user_id = result.scalar_one_or_none()
+            if user_id:
+                return user_id
+        except ValueError:
+            pass
+
+        # Try as roll_number or sit_email
+        stmt = select(Student.user_id).where(
+            or_(Student.roll_number == identifier, Student.sit_email == identifier)
+        )
+
+        result = await db.execute(stmt)
+        user_id = result.scalar_one_or_none()
+
+        if user_id:
+            logger.info(f"Found user_id {user_id} for student identifier {identifier}")
+        else:
+            logger.warning(f"No student found for identifier {identifier}")
+
+        return user_id
+
+    except Exception as e:
+        logger.error(
+            f"Error getting user_id for student identifier {identifier}: {str(e)}",
+            exc_info=True,
+        )
+        return None
+
+
+async def get_user_id_from_staff_identifier(
+    db: AsyncSession, identifier: str
+) -> Optional[uuid.UUID]:
+    """
+    Get user_id from staff identifier (staff ID or employee_id).
+
+    Args:
+        db: Database session
+        identifier: Staff ID (UUID string) or employee_id
+
+    Returns:
+        User ID if found, None otherwise
+    """
+    try:
+        # Try to parse as UUID first (staff.id)
+        try:
+            staff_uuid = uuid.UUID(identifier)
+            stmt = select(Staff.user_id).where(Staff.id == staff_uuid)
+            result = await db.execute(stmt)
+            user_id = result.scalar_one_or_none()
+            if user_id:
+                return user_id
+        except ValueError:
+            pass
+
+        # Try as employee_id
+        stmt = select(Staff.user_id).where(Staff.employee_id == identifier)
+        result = await db.execute(stmt)
+        user_id = result.scalar_one_or_none()
+
+        if user_id:
+            logger.info(f"Found user_id {user_id} for staff identifier {identifier}")
+        else:
+            logger.warning(f"No staff found for identifier {identifier}")
+
+        return user_id
+
+    except Exception as e:
+        logger.error(
+            f"Error getting user_id for staff identifier {identifier}: {str(e)}",
+            exc_info=True,
+        )
+        return None
 
 
 def create_notification_async(
@@ -18,13 +266,13 @@ def create_notification_async(
     expires_at: Optional[datetime] = None,
     in_app_enabled: bool = True,
     line_app_enabled: bool = False,
-    **metadata
+    **metadata,
 ) -> str:
     """
     Create notification asynchronously via Celery task.
-    
+
     Simple helper function to trigger notification creation without complex logic.
-    
+
     Args:
         request_id: Request ID for tracking
         notification_code: Code identifying the notification type
@@ -37,7 +285,7 @@ def create_notification_async(
         in_app_enabled: Whether in-app notifications are enabled
         line_app_enabled: Whether LINE notifications are enabled
         **metadata: Additional metadata for the notification
-        
+
     Returns:
         str: Celery task ID
     """
@@ -60,7 +308,7 @@ def create_notification_async(
 
         # Use Celery task for async processing
         result = create_notification_task.delay(**task_args)
-        
+
         logger.info(
             "Notification creation task triggered",
             task_id=result.id,
@@ -68,7 +316,7 @@ def create_notification_async(
             entity_id=str(entity_id),
             recipient_count=len(recipient_ids),
         )
-        
+
         return result.id
 
     except Exception as e:

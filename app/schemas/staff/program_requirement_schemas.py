@@ -199,25 +199,29 @@ class ProgramRequirementDetailResponse(BaseModel):
     recurrence_type: ProgReqRecurrenceType = Field(..., description="Recurrence type")
     last_recurrence_at: datetime = Field(..., description="Last recurrence timestamp")
     effective_from_year: Optional[str] = Field(None, description="Effective from year")
-    effective_until_year: Optional[str] = Field(None, description="Effective until year")
+    effective_until_year: Optional[str] = Field(
+        None, description="Effective until year"
+    )
     months_before_deadline: Optional[int] = Field(
         None, description="Months before deadline to create schedules"
     )
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
-    
+
     # Program information
     program_id: uuid.UUID = Field(..., description="Program ID")
     program_code: str = Field(..., description="Program code")
     program_name: str = Field(..., description="Program name")
-    
-    # Certificate type information  
+
+    # Certificate type information
     cert_type_id: uuid.UUID = Field(..., description="Certificate type ID")
     cert_code: str = Field(..., description="Certificate type code")
     cert_name: str = Field(..., description="Certificate type name")
-    
+
     # Schedule statistics
-    schedules_count: int = Field(..., description="Number of schedules created for this requirement")
+    schedules_count: int = Field(
+        ..., description="Number of schedules created for this requirement"
+    )
     latest_schedule_deadline: Optional[datetime] = Field(
         None, description="Deadline of the latest schedule created"
     )

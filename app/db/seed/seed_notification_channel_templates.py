@@ -65,11 +65,11 @@ async def seed_notification_channel_templates(db_session: AsyncSession):
             }
         ],
         # ProgramRequirementSchedule actions
-        "program_requirement_schedule_overdue": [
+        "program_requirement_schedule_remind": [
             {
                 "channel_type": ChannelType.IN_APP,
-                "template_subject": "Requirement Overdue: {requirement_name}",
-                "template_body": "{requirement_name} for {program_name} is {days_overdue} days overdue. Deadline was {deadline_date}.",
+                "template_subject": "Requirement Reminder: {requirement_name}",
+                "template_body": "Reminder: {requirement_name} for {program_name} due {deadline_date}. {mandatory_flag}",
                 "template_format": TemplateFormat.MARKDOWN,
             }
         ],
@@ -81,11 +81,11 @@ async def seed_notification_channel_templates(db_session: AsyncSession):
                 "template_format": TemplateFormat.MARKDOWN,
             }
         ],
-        "program_requirement_schedule_remind": [
+        "program_requirement_schedule_overdue": [
             {
                 "channel_type": ChannelType.IN_APP,
-                "template_subject": "Requirement Reminder: {requirement_name}",
-                "template_body": "Reminder: {requirement_name} for {program_name} due {deadline_date}. {mandatory_flag}",
+                "template_subject": "Requirement Overdue: {requirement_name}",
+                "template_body": "{requirement_name} for {program_name} is {days_overdue} days overdue. Deadline was {deadline_date}.",
                 "template_format": TemplateFormat.MARKDOWN,
             }
         ],
