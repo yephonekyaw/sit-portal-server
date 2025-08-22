@@ -17,7 +17,7 @@ logger = get_logger()
 async def seed_program_requirement_schedules(db_session: AsyncSession):
     # First, ensure we have an academic year (create one if needed)
     current_year = datetime.now().year
-    academic_year_code = str(current_year)
+    academic_year_code = current_year
 
     academic_year_stmt = select(AcademicYear).where(
         AcademicYear.year_code == academic_year_code

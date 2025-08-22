@@ -160,8 +160,11 @@ class StudentService:
         if not year_code:
             raise ValueError("Academic year cannot be empty")
 
+        # Convert year_code to integer
+        year_code_int = int(year_code)
+
         # Try to get existing
-        stmt = select(AcademicYear).where(AcademicYear.year_code == year_code)
+        stmt = select(AcademicYear).where(AcademicYear.year_code == year_code_int)
         result = await self.db.execute(stmt)
         academic_year = result.scalar_one_or_none()
 
@@ -169,10 +172,10 @@ class StudentService:
             return academic_year
 
         # Create new one
-        start_year, end_year = int(year_code), int(year_code) + 4
+        start_year, end_year = year_code_int, year_code_int + 4
 
         academic_year = AcademicYear(
-            year_code=year_code,
+            year_code=year_code_int,
             start_date=datetime(start_year, 8, 1),
             end_date=datetime(end_year, 6, 30),
             is_current=True,

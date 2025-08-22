@@ -22,9 +22,10 @@ class NotificationServiceRegistry:
         "certificate_submission_reject": create_certificate_service,
         "certificate_submission_request": create_certificate_service,
         # Program requirement schedule notifications
-        "program_requirement_overdue": create_schedule_service,
-        "program_requirement_warn": create_schedule_service,
-        "program_requirement_remind": create_schedule_service,
+        "program_requirement_schedule_remind": create_schedule_service,
+        "program_requirement_schedule_warn": create_schedule_service,
+        "program_requirement_schedule_late": create_schedule_service,
+        "program_requirement_schedule_overdue": create_schedule_service,
     }
 
     @classmethod

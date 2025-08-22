@@ -49,12 +49,33 @@ beat_schedule = {
         "args": ("daily_scheduled_processor_cron",),
         "options": {"queue": "notifications"},
     },
+    # Daily requirement deadline notifier at 9:00 AM Bangkok time
+    "daily-requirement-schedule-notifier": {
+        "task": "app.tasks.daily_requirement_schedule_notifier.daily_requirement_notifier_task",
+        "schedule": crontab(hour=9, minute=0),  # 9:00 AM Bangkok time
+        "args": ("daily_requirement_schedule_notifier_cron",),
+        "options": {"queue": "notifications"},
+    },
     # Daily notification expiration task at 00:05 AM Bangkok time
     "daily-notification-expiration": {
         "task": "app.tasks.daily_notification_expiration.daily_notification_expiration_task",
         "schedule": crontab(hour=0, minute=5),  # 00:05 AM Bangkok time
         "args": ("daily_expiration_cron",),
         "options": {"queue": "notifications"},
+    },
+    # Monthly program requirement schedule creator on 1st of every month at midnight
+    "monthly-schedule-creator": {
+        "task": "app.tasks.monthly_schedule_creator.monthly_schedule_creator_task",
+        "schedule": crontab(hour=0, minute=0, day_of_month=1),  # 1st of month at 00:00 AM Bangkok time
+        "args": ("monthly_schedule_creator_cron",),
+        "options": {"queue": "schedules"},
+    },
+    # Annual requirement archiver on second Monday of August at 2:00 AM Bangkok time
+    "annual-requirement-archiver": {
+        "task": "app.tasks.annual_requirement_archiver.annual_requirement_archiver_task",
+        "schedule": crontab(hour=2, minute=0, day_of_week=1, month_of_year=8, day_of_month="8-14"),  # Second Monday of August
+        "args": ("annual_requirement_archiver_cron",),
+        "options": {"queue": "schedules"},
     },
 }
 
@@ -63,6 +84,9 @@ task_routes = {
     "app.tasks.notification_*": {"queue": "notifications"},
     "app.tasks.daily_scheduled_processor.*": {"queue": "notifications"},
     "app.tasks.daily_notification_expiration.*": {"queue": "notifications"},
+    "app.tasks.daily_requirement_schedule_notifier.*": {"queue": "notifications"},
+    "app.tasks.monthly_schedule_creator.*": {"queue": "schedules"},
+    "app.tasks.annual_requirement_archiver.*": {"queue": "schedules"},
     "app.tasks.citi_cert_verification_task.*": {"queue": "verification"},
 }
 

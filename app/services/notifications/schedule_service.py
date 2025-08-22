@@ -1,6 +1,5 @@
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import uuid
-from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -48,9 +47,11 @@ class ProgramRequirementScheduleNotificationService(BaseNotificationService):
             "days_remaining": DeadlineCalculator.calculate_days_remaining(
                 deadline_date
             ),
-            "days_overdue": DeadlineCalculator.calculate_days_overdue(deadline_date),
+            "days_late": DeadlineCalculator.calculate_days_late(deadline_date),
+            "days_overdue": DeadlineCalculator.calculate_days_overdue(
+                grace_deadline_date
+            ),
             "is_overdue": DeadlineCalculator.is_deadline_passed(deadline_date),
-            "deadline_status": DeadlineCalculator.get_deadline_status(deadline_date),
         }
 
     def _format_requirement_data(

@@ -176,7 +176,10 @@ ProgramRequirementSchedules (1) → (Many) CertificateSubmissions
 
 ### Technical Implementation
 - The `recurrence_type` field allows for different automation patterns
-- The `last_recurrence_at` field tracks when schedules were last generated
+- The `last_recurrence_at` field tracks when schedules were last generated for specific student cohorts
+  * Stores August 1st of the student cohort year (not specific deadline dates)
+  * Only compares years to handle deadline date changes gracefully
+  * Example: For cohort 2024, stores 2024-08-01 00:00:00 UTC regardless of actual deadline month/day
 - Using `is_active = False` instead of deletion preserves historical data
 - The design supports multiple requirements per program and multiple programs per certificate type
 - Academic years provide the temporal framework for calculating specific deadlines

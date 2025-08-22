@@ -141,7 +141,7 @@ class ProgramRequirementScheduleDetailResponse(BaseModel):
 
     # Academic year information
     academic_year_id: uuid.UUID = Field(..., description="Academic year ID")
-    year_code: str = Field(..., description="Academic year code")
+    year_code: int = Field(..., description="Academic year code")
     academic_start_date: datetime = Field(..., description="Academic year start date")
     academic_end_date: datetime = Field(..., description="Academic year end date")
 
@@ -189,7 +189,7 @@ class ProgramRequirementScheduleListItemResponse(BaseModel):
     cert_name: str = Field(..., description="Certificate type name")
 
     # Academic year information
-    academic_year: str = Field(..., description="Academic year code")
+    academic_year: int = Field(..., description="Academic year code")
 
     # Program requirement information
     requirement_name: str = Field(..., description="Requirement name")

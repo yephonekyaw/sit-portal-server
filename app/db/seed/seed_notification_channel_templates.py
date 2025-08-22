@@ -81,6 +81,15 @@ async def seed_notification_channel_templates(db_session: AsyncSession):
                 "template_format": TemplateFormat.MARKDOWN,
             }
         ],
+        "program_requirement_schedule_late": [
+            {
+                "channel_type": ChannelType.IN_APP,
+                "template_subject": "Late Submission: {requirement_name}",
+                "template_body": "{requirement_name} for {program_name} was due on {deadline_date}. "
+                "You are {days_late} days late. Please submit as soon as possible to avoid penalties.",
+                "template_format": TemplateFormat.MARKDOWN,
+            }
+        ],
         "program_requirement_schedule_overdue": [
             {
                 "channel_type": ChannelType.IN_APP,

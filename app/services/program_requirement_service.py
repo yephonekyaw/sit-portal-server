@@ -404,7 +404,7 @@ class ProgramRequirementServiceProvider:
         if not cert_type.is_active:
             raise ValueError("CERTIFICATE_TYPE_NOT_ACTIVE")
 
-    async def _get_oldest_academic_year(self) -> Optional[str]:
+    async def _get_oldest_academic_year(self) -> Optional[int]:
         """Get the oldest academic year from the system"""
         result = await self.db.execute(
             select(AcademicYear.year_code)
@@ -415,7 +415,7 @@ class ProgramRequirementServiceProvider:
 
     async def _get_latest_schedule_academic_year(
         self, requirement_id: uuid.UUID
-    ) -> Optional[str]:
+    ) -> Optional[int]:
         """Get the latest academic year for which schedules have been created"""
         result = await self.db.execute(
             select(AcademicYear.year_code)

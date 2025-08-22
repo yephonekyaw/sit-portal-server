@@ -412,9 +412,9 @@ class ProgramRequirement(Base, AuditMixin):
     notification_days_before_deadline: Mapped[int] = mapped_column(
         Integer, default=90, nullable=False
     )
-    effective_from_year: Mapped[Optional[str]] = mapped_column(String(10))
-    effective_until_year: Mapped[Optional[str]] = mapped_column(
-        String(10)
+    effective_from_year: Mapped[Optional[int]] = mapped_column(Integer)
+    effective_until_year: Mapped[Optional[int]] = mapped_column(
+        Integer
     )  # Up to this academic year
     months_before_deadline: Mapped[Optional[int]] = mapped_column(Integer, default=1)
 
@@ -524,7 +524,7 @@ class AcademicYear(Base, AuditMixin):
         default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
-    year_code: Mapped[str] = mapped_column(String(10), unique=True, nullable=False)
+    year_code: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
     start_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False
     )

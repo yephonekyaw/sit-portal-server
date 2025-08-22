@@ -35,14 +35,12 @@ class CreateProgramRequirementRequest(BaseModel):
         default=ProgReqRecurrenceType.ANNUAL,
         description="How often the requirement recurs",
     )
-    effective_from_year: Optional[str] = Field(
+    effective_from_year: Optional[int] = Field(
         default=None,
-        max_length=10,
         description="Academic year from which requirement is effective",
     )
-    effective_until_year: Optional[str] = Field(
+    effective_until_year: Optional[int] = Field(
         default=None,
-        max_length=10,
         description="Academic year until which requirement is effective",
     )
     months_before_deadline: Optional[int] = Field(
@@ -107,14 +105,12 @@ class UpdateProgramRequirementRequest(BaseModel):
         default=ProgReqRecurrenceType.ANNUAL,
         description="How often the requirement recurs",
     )
-    effective_from_year: Optional[str] = Field(
+    effective_from_year: Optional[int] = Field(
         default=None,
-        max_length=10,
         description="Academic year from which requirement is effective",
     )
-    effective_until_year: Optional[str] = Field(
+    effective_until_year: Optional[int] = Field(
         default=None,
-        max_length=10,
         description="Academic year until which requirement is effective",
     )
     months_before_deadline: Optional[int] = Field(
@@ -170,8 +166,8 @@ class ProgramRequirementResponse(BaseModel):
     is_active: bool = Field(..., description="Whether requirement is active")
     special_instruction: Optional[str] = Field(None, description="Special instructions")
     recurrence_type: ProgReqRecurrenceType = Field(..., description="Recurrence type")
-    effective_from_year: Optional[str] = Field(None, description="Effective from year")
-    effective_until_year: Optional[str] = Field(
+    effective_from_year: Optional[int] = Field(None, description="Effective from year")
+    effective_until_year: Optional[int] = Field(
         None, description="Effective until year"
     )
     months_before_deadline: Optional[int] = Field(
@@ -198,8 +194,8 @@ class ProgramRequirementDetailResponse(BaseModel):
     special_instruction: Optional[str] = Field(None, description="Special instructions")
     recurrence_type: ProgReqRecurrenceType = Field(..., description="Recurrence type")
     last_recurrence_at: datetime = Field(..., description="Last recurrence timestamp")
-    effective_from_year: Optional[str] = Field(None, description="Effective from year")
-    effective_until_year: Optional[str] = Field(
+    effective_from_year: Optional[int] = Field(None, description="Effective from year")
+    effective_until_year: Optional[int] = Field(
         None, description="Effective until year"
     )
     months_before_deadline: Optional[int] = Field(
