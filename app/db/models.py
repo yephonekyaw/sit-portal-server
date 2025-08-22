@@ -1024,3 +1024,32 @@ class DashboardStats(Base, AuditMixin):
             "last_calculated_at",
         ),
     )
+
+
+# LINE API access token management
+class LineChannelAccessToken(Base, AuditMixin):
+    __tablename__ = "line_channel_access_tokens"
+
+    key_id: Mapped[str] = mapped_column(String(100), primary_key=True)
+    access_token: Mapped[str] = mapped_column(String(500), nullable=False)
+    token_type: Mapped[str] = mapped_column(
+        String(20), default="Bearer", nullable=False
+    )
+    expires_in: Mapped[int] = mapped_column(Integer, nullable=False)  # seconds
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+    # Constraints
+    __table_args__ = (
+        Index("idx_line_tokens_active", "is_active", "expires_at"),
+        Index("idx_line_tokens_expires_at", "expires_at"),
+        CheckConstraint("expires_in > 0", name="ck_line_tokens_expires_in_positive"),
+        CheckConstraint(
+            "revoked_at IS NULL OR is_revoked = true",
+            name="ck_line_tokens_revoked_consistency",
+        ),
+    )

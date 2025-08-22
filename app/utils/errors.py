@@ -59,6 +59,15 @@ class NotFoundError(Exception):
         self.error_code = error_code
 
 
+class LineApplicationError(Exception):
+    """Custom exception for LINE application errors."""
+
+    def __init__(self, message: str, error_code: str = "LINE_ERROR"):
+        super().__init__(message)
+        self.message = message
+        self.error_code = error_code
+
+
 def setup_error_handlers(app: FastAPI):
     """Setup custom error handlers."""
 
@@ -212,6 +221,20 @@ def setup_error_handlers(app: FastAPI):
             error_code=exc.error_code,
             status_code=status.HTTP_404_NOT_FOUND,
             meta={"error_type": "NOT_FOUND_ERROR"},
+        )
+
+    @app.exception_handler(LineApplicationError)
+    async def line_application_exception_handler(
+        request: Request, exc: LineApplicationError
+    ):
+        logger.error(f"LINE Application Error: {exc.message}")
+
+        return ResponseBuilder.error(
+            request=request,
+            message=exc.message,
+            error_code=exc.error_code,
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            meta={"error_type": "LINE_APPLICATION_ERROR"},
         )
 
     @app.exception_handler(ValueError)

@@ -5,11 +5,8 @@ from pathlib import Path
 from loguru import logger
 import json
 from datetime import date
-from typing import Dict, Any
 
 from app.utils.context import get_request_id
-
-
 
 
 class InterceptHandler(logging.Handler):

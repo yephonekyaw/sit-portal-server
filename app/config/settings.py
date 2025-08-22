@@ -60,6 +60,12 @@ class Settings(BaseSettings):
     CELERY_BROKER_URL: str = "redis://:your-redis-password@localhost:6379/0"
     CELERY_RESULT_BACKEND: str = "redis://:your-redis-password@localhost:6379/0"
 
+    # Line Messaging API
+    LINE_SIGNING_KEY_PATH: str = "<path-to-your-line-signing-key-json>"
+    LINE_KID: str = "<your-line-kid>"
+    LINE_CHANNEL_ID: str = "<your-line-channel-id>"
+    LINE_CHANNEL_SECRET: str = "<your-line-channel-secret>"
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if not v:
