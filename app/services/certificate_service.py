@@ -37,7 +37,7 @@ class CertificateServiceProvider:
         self, code: str, exclude_id: Optional[uuid.UUID] = None
     ) -> bool:
         """Check if certificate code already exists (optionally excluding a specific ID)"""
-        query = select(CertificateType).where(CertificateType.code == code)
+        query = select(CertificateType).where(CertificateType.cert_code == code)
         if exclude_id:
             query = query.where(CertificateType.id != exclude_id)
 
@@ -59,8 +59,8 @@ class CertificateServiceProvider:
             for row in certificates_data:
                 certificate_item = CertificateTypeResponse(
                     id=row.id,
-                    code=row.code,
-                    name=row.name,
+                    cert_code=row.cert_code,
+                    cert_name=row.cert_name,
                     description=row.description,
                     verification_template=row.verification_template,
                     has_expiration=row.has_expiration,
@@ -89,9 +89,9 @@ class CertificateServiceProvider:
             raise ValueError("CERTIFICATE_TYPE_NOT_FOUND")
 
         # Check if another certificate already has this code (excluding current certificate)
-        if certificate_data.code != certificate.code:
+        if certificate_data.cert_code != certificate.cert_code:
             if await self.check_certificate_code_exists(
-                certificate_data.code, exclude_id=certificate_id
+                certificate_data.cert_code, exclude_id=certificate_id
             ):
                 raise ValueError("CERTIFICATE_CODE_EXISTS")
 
@@ -103,19 +103,19 @@ class CertificateServiceProvider:
             )
 
             # Update certificate fields
-            certificate.code = certificate_data.code
-            certificate.name = certificate_data.name
+            certificate.cert_code = certificate_data.cert_code
+            certificate.cert_name = certificate_data.cert_name
             certificate.description = certificate_data.description
             certificate.verification_template = updated_template
 
             await self.db.commit()
             await self.db.refresh(certificate)
 
-            logger.info(f"Updated certificate: {certificate.code}")
+            logger.info(f"Updated certificate: {certificate.cert_code}")
             return {
                 "id": str(certificate.id),
-                "code": certificate.code,
-                "name": certificate.name,
+                "cert_code": certificate.cert_code,
+                "cert_name": certificate.cert_name,
             }
 
         except IntegrityError as e:
@@ -165,13 +165,13 @@ class CertificateServiceProvider:
             await self.db.commit()
             await self.db.refresh(certificate)
 
-            logger.info(f"Archived certificate {certificate.code}")
+            logger.info(f"Archived certificate {certificate.cert_code}")
 
             return {
                 "certificate": {
                     "id": str(certificate.id),
-                    "code": certificate.code,
-                    "name": certificate.name,
+                    "cert_code": certificate.cert_code,
+                    "cert_name": certificate.cert_name,
                 },
                 "archived_requirements_count": 0,
             }
@@ -223,8 +223,8 @@ class CertificateServiceProvider:
         return (
             select(
                 CertificateType.id,
-                CertificateType.code,
-                CertificateType.name,
+                CertificateType.cert_code,
+                CertificateType.cert_name,
                 CertificateType.description,
                 CertificateType.verification_template,
                 CertificateType.has_expiration,

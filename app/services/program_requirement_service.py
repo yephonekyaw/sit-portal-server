@@ -300,8 +300,8 @@ class ProgramRequirementServiceProvider:
                 Program.program_name,
                 # Certificate type fields
                 ProgramRequirement.cert_type_id,
-                CertificateType.code.label("cert_code"),
-                CertificateType.name.label("cert_name"),
+                CertificateType.cert_code,
+                CertificateType.cert_name,
                 # Schedule statistics
                 func.coalesce(schedule_stats_subquery.c.schedules_count, 0).label(
                     "schedules_count"

@@ -90,7 +90,7 @@ async def submit_certificate(
 
         # Upload file to MinIO with certificate code as prefix
         upload_result = await minio_service.upload_file(
-            file=file, prefix=cert_type.code, filename=file.filename
+            file=file, prefix=cert_type.cert_code, filename=file.filename
         )
 
         if not upload_result["success"]:

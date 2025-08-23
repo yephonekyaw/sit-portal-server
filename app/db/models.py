@@ -560,8 +560,8 @@ class CertificateType(Base, AuditMixin):
         default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
-    code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
-    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    cert_code: Mapped[str] = mapped_column(String(50), unique=True, nullable=False)
+    cert_name: Mapped[str] = mapped_column(String(200), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     verification_template: Mapped[str] = mapped_column(Text, nullable=False)
     has_expiration: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -580,7 +580,7 @@ class CertificateType(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        Index("idx_certificate_types_code", "code"),
+        Index("idx_certificate_types_cert_code", "cert_code"),
         Index("idx_certificate_types_is_active", "is_active"),
     )
 

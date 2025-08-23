@@ -51,7 +51,7 @@ async def seed_program_requirement_schedules(db_session: AsyncSession):
 
     # Get CITI certificate type
     cert_type_stmt = select(CertificateType).where(
-        CertificateType.code == "citi_program_certificate"
+        CertificateType.cert_code == "citi_program_certificate"
     )
     cert_type_result = await db_session.execute(cert_type_stmt)
     cert_type = cert_type_result.scalar_one_or_none()

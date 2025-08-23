@@ -11,15 +11,15 @@ logger = get_logger()
 async def seed_certificate_types(db_session: AsyncSession):
     certificate_types = [
         {
-            "code": "citi_program_certificate",
-            "name": "CITI Program Certificate",
+            "cert_code": "citi_program_certificate",
+            "cert_name": "CITI Program Certificate",
             "description": "Certificate for CITI Program courses.",
             "verification_template": citi_program_verification_template,
             "has_expiration": False,
         },
     ]
 
-    existing_certificates = select(CertificateType.code)
+    existing_certificates = select(CertificateType.cert_code)
     existing_codes_result = await db_session.execute(existing_certificates)
     existing_codes = {code for code, in existing_codes_result.fetchall()}
 

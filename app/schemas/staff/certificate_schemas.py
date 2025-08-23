@@ -7,8 +7,8 @@ class CertificateTypeResponse(BaseModel):
     """Response schema for certificate type with counts"""
 
     id: uuid.UUID = Field(..., description="Certificate type ID")
-    code: str = Field(..., description="Certificate type code")
-    name: str = Field(..., description="Certificate type name")
+    cert_code: str = Field(..., description="Certificate type code")
+    cert_name: str = Field(..., description="Certificate type name")
     description: str = Field(..., description="Certificate type description")
     verification_template: str = Field(..., description="Verification template")
     has_expiration: bool = Field(..., description="Whether certificate has expiration")
@@ -30,11 +30,19 @@ class CertificateTypeResponse(BaseModel):
 
 class UpdateCertificateTypeRequest(BaseModel):
     """Request schema for updating a certificate type"""
-    
-    code: str = Field(..., min_length=1, max_length=50, description="Certificate type code")
-    name: str = Field(..., min_length=1, max_length=200, description="Certificate type name")
-    description: str = Field(..., min_length=1, description="Certificate type description")
-    verification_template: str = Field(..., min_length=1, description="Verification template")
+
+    cert_code: str = Field(
+        ..., min_length=1, max_length=50, description="Certificate type code"
+    )
+    cert_name: str = Field(
+        ..., min_length=1, max_length=200, description="Certificate type name"
+    )
+    description: str = Field(
+        ..., min_length=1, description="Certificate type description"
+    )
+    verification_template: str = Field(
+        ..., min_length=1, description="Verification template"
+    )
 
 
 class CertificateTypeArchiveResponse(BaseModel):
