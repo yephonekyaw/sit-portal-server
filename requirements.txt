@@ -16,6 +16,7 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
 colorama==0.4.6
+cryptography==45.0.6
 dnspython==2.7.0
 email_validator==2.2.0
 fastapi==0.116.1
@@ -38,12 +39,14 @@ idna==3.10
 Jinja2==3.1.6
 jsonpatch==1.33
 jsonpointer==3.0.0
+jwcrypto==1.5.6
 kombu==5.5.4
 langchain==0.3.26
 langchain-core==0.3.68
 langchain-google-genai==2.1.7
 langchain-text-splitters==0.3.8
 langsmith==0.4.5
+ldap3==2.9.1
 loguru==0.7.3
 markdown-it-py==3.0.0
 MarkupSafe==3.0.2

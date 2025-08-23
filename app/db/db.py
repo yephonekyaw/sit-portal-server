@@ -1,7 +1,6 @@
 import asyncio
 from .models import Base
-
-# from .seed.main import seed_db
+from .seeds.main import seed_all_data
 from .session import async_engine
 
 from app.utils.logging import get_logger
@@ -21,11 +20,16 @@ async def drop_tables():
     logger.info("Dropped all tables.")
 
 
+async def seed_db():
+    """Seed the database with initial data"""
+    await seed_all_data()
+
+
 async def reset_db():
     logger.info("Resetting database...")
     await drop_tables()
     await create_tables()
-    # await seed_db()
+    await seed_db()
     logger.info("Database reset complete.")
 
 

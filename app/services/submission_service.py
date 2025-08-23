@@ -39,8 +39,6 @@ class SubmissionServiceProvider:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
-    # ========== PUBLIC API METHODS ==========
-
     async def get_certificate_submissions_by_year(
         self, year_code: int, is_submitted: bool = True
     ) -> CertificateSubmissionsListResponse:

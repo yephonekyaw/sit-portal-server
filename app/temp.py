@@ -110,182 +110,76 @@ if __name__ == "__main__":
     # Run the test function
     asyncio.run(test_playwright_browser())
 
-import uuid
-from datetime import datetime, timezone
-from typing import List, Optional
-from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models import (
-    ChannelType,
-    Notification,
-    NotificationRecipient,
-    NotificationType,
-    User,
-    UserType,
-    ActorType,
-    NotificationStatus,
-    Priority,
-)
+# package sit.cs.sitbrain.security;
 
+# import org.slf4j.Logger;
+# import org.slf4j.LoggerFactory;
+# import org.springframework.beans.factory.annotation.Autowired;
+# import org.springframework.http.HttpStatus;
+# import org.springframework.http.ResponseEntity;
+# import org.springframework.ldap.core.LdapTemplate;
+# import org.springframework.web.bind.annotation.PostMapping;
+# import org.springframework.web.bind.annotation.RequestBody;
+# import org.springframework.web.bind.annotation.RestController;
 
-class NotificationService:
-    """Service for managing notifications and recipients"""
+# import javax.naming.directory.DirContext;
 
-    def __init__(self, db_session: AsyncSession):
-        self.db = db_session
+# @RestController
+# public class LDAPController {
 
-    async def _get_notification_type_by_code(self, code: str) -> NotificationType:
-        """Get notification type by code or raise ValueError if not found."""
-        result = await self.db.execute(
-            select(NotificationType).where(NotificationType.code == code)
-        )
-        notification_type = result.scalar_one_or_none()
-        if not notification_type:
-            raise ValueError(f"Notification type '{code}' not found.")
-        return notification_type
+#     @Autowired
+#     private LdapTemplate ldapTemplate;
+#     @Autowired
+#     private CustomUserDetailsService customUserDetailsService;
 
-    async def _get_recipient_by_ids(
-        self, notification_id: uuid.UUID, user_id: uuid.UUID
-    ) -> Optional[NotificationRecipient]:
-        """Get notification recipient by notification and user IDs."""
-        result = await self.db.execute(
-            select(NotificationRecipient).where(
-                NotificationRecipient.notification_id == notification_id,
-                NotificationRecipient.recipient_id == user_id,
-            )
-        )
-        return result.scalar_one_or_none()
+#     private static final Logger logger = LoggerFactory.getLogger(LDAPController.class);
 
-    async def _create_notification_recipients(
-        self, notification_id: uuid.UUID, recipient_ids: List[uuid.UUID]
-    ) -> None:
-        """Create notification recipients for given user IDs."""
-        # Get all valid users in one query
-        users_result = await self.db.execute(
-            select(User).where(User.id.in_(recipient_ids))
-        )
-        users = {user.id: user for user in users_result.scalars().all()}
+#     private static final String[] BASE_DNS = {
+#             "ou=People,ou=staff,dc=sit,dc=kmutt,dc=ac,dc=th",
+#             "ou=People,ou=st,dc=sit,dc=kmutt,dc=ac,dc=th"
+#     };
 
-        # Create recipients
-        recipients = []
-        for recipient_id in recipient_ids:
-            user = users.get(recipient_id)
-            if user:
-                recipients.append(
-                    NotificationRecipient(
-                        notification_id=notification_id,
-                        recipient_id=user.id,
-                        status=NotificationStatus.PENDING,
-                        in_app_enabled=True,
-                        microsoft_teams_enabled=(user.user_type == UserType.STUDENT),
-                    )
-                )
+#     @PostMapping("/v1/auth/login")
+#     public ResponseEntity<String> login(@RequestBody LoginRequest loginRequest) {
+#         String username = loginRequest.getUsername();
+#         String password = loginRequest.getPassword();
+#         logger.info("Attempting to authenticate user: {}", username);
+#         try {
+#             boolean authenticated = false;
+#             for (String baseDn : BASE_DNS) {
+#                 final String userDn = "uid=" + username + "," + baseDn;
+#                 try {
+#                     // Authenticate
+#                     DirContext ctx = ldapTemplate.getContextSource().getContext(userDn, password);
+#                     if (ctx != null) {
+#                         authenticated = true;
+#                     }
+#                     logger.error("Authenticated with user: {} with base DN: {} is {}", username, baseDn,authenticated);
+#                 } catch (Exception e) {
+#                     // Assuming different DN might lead to a failure; ignore and try next
+#                     logger.error(e.getMessage(), e);
+#                     logger.error("Failed to authenticate user: {} with base DN: {}", username, baseDn);
+#                 }
+#                 if (authenticated) {
+#                     break;
+#                 }
+#             }
 
-        self.db.add_all(recipients)
+#             if (authenticated) {
+#                 // Generate JWT on successful authentication
+#                 String token = JwtUtil.generateToken(username);
+#                 customUserDetailsService.checkUser(username);
+#                 logger.info("Authentication successful for user: {}", username);
+#                 return ResponseEntity.ok(token);
 
-    async def create_notification(
-        self,
-        notification_type_code: str,
-        entity_id: uuid.UUID,
-        actor_type: ActorType,
-        subject: str,
-        body: str,
-        recipient_ids: List[uuid.UUID],
-        actor_id: Optional[uuid.UUID] = None,
-        priority: Optional[Priority] = None,
-        notification_metadata: Optional[dict] = None,
-        scheduled_for: Optional[str] = None,
-        expires_at: Optional[str] = None,
-    ) -> Notification:
-        """Create a new notification and link it to recipients."""
-        notification_type = await self._get_notification_type_by_code(
-            notification_type_code
-        )
-
-        notification = Notification(
-            notification_type_id=notification_type.id,
-            entity_id=entity_id,
-            actor_type=actor_type,
-            actor_id=actor_id,
-            subject=subject,
-            body=body,
-            priority=priority or notification_type.default_priority,
-            notification_metadata=notification_metadata,
-            scheduled_for=scheduled_for,
-            expires_at=expires_at,
-        )
-
-        self.db.add(notification)
-        await self.db.flush()  # Get notification ID
-
-        await self._create_notification_recipients(notification.id, recipient_ids)
-        await self.db.commit()
-
-        return notification
-
-    async def mark_notification_as_read(
-        self, notification_id: uuid.UUID, user_id: uuid.UUID
-    ) -> bool:
-        """Mark a notification as read for a specific user."""
-        result = await self.db.execute(
-            update(NotificationRecipient)
-            .where(
-                NotificationRecipient.notification_id == notification_id,
-                NotificationRecipient.recipient_id == user_id,
-            )
-            .values(status=NotificationStatus.READ, read_at=datetime.now(timezone.utc))
-        )
-        await self.db.commit()
-        return result.rowcount > 0
-
-    async def mark_notification_as_delivered(
-        self,
-        notification_id: uuid.UUID,
-        user_id: uuid.UUID,
-        channel_type: Optional[ChannelType] = None,
-    ) -> bool:
-        """Mark a notification as delivered for a specific user."""
-        update_values = {
-            "status": NotificationStatus.DELIVERED,
-            "delivered_at": datetime.now(timezone.utc),
-        }
-
-        result = await self.db.execute(
-            update(NotificationRecipient)
-            .where(
-                NotificationRecipient.notification_id == notification_id,
-                NotificationRecipient.recipient_id == user_id,
-            )
-            .values(**update_values)
-        )
-        await self.db.commit()
-        return result.rowcount > 0
-
-    async def mark_notification_as_failed(
-        self, notification_id: uuid.UUID, user_id: uuid.UUID
-    ) -> bool:
-        """Mark a notification as failed for a specific user."""
-        result = await self.db.execute(
-            update(NotificationRecipient)
-            .where(
-                NotificationRecipient.notification_id == notification_id,
-                NotificationRecipient.recipient_id == user_id,
-            )
-            .values(status=NotificationStatus.FAILED)
-        )
-        await self.db.commit()
-        return result.rowcount > 0
-
-    async def mark_all_notifications_as_read(self, user_id: uuid.UUID) -> int:
-        """Mark all unread notifications as read for a user."""
-        result = await self.db.execute(
-            update(NotificationRecipient)
-            .where(
-                NotificationRecipient.recipient_id == user_id,
-                NotificationRecipient.status == NotificationStatus.DELIVERED,
-            )
-            .values(status=NotificationStatus.READ, read_at=datetime.now(timezone.utc))
-        )
-        await self.db.commit()
-        return result.rowcount
+#             } else {
+#                 logger.error("Authentication failed for user: {}", username);
+#                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Invalid credentials");
+#             }
+#         } catch (Exception e) {
+#             logger.error("An error occurred during authentication for user: {}", username, e);
+#             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body("Failure: " + e.getMessage());
+#         }
+#     }
+# }
