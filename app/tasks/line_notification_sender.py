@@ -69,11 +69,7 @@ async def send_line_notification_task(
         )
         result_row = notification_result.first()
         if not result_row:
-            logger.error(
-                "Notification or recipient not found",
-                notification_id=notification_id,
-                recipient_id=recipient_id,
-            )
+            logger.error(f"Notification or recipient not found: {notification_id}, {recipient_id}")
             return {
                 "success": False,
                 "error": "Notification or recipient not found",
@@ -88,10 +84,7 @@ async def send_line_notification_task(
         )
 
         if not service:
-            logger.error(
-                "No service found for notification code",
-                notification_code=notification.notification_type.code,
-            )
+            logger.error(f"No service found for notification code: {notification.notification_type.code}")
             recipient.status = NotificationStatus.FAILED
             await db_session.commit()
             return {
@@ -106,18 +99,11 @@ async def send_line_notification_task(
             )
             message = await service.construct_message("line_app", notification_data)
         except Exception as e:
-            logger.error(
-                "Failed to get notification data or construct message",
-                notification_id=notification_id,
-                error=str(e),
-            )
+            logger.error(f"Failed to get notification data or construct message for {notification_id}: {str(e)}")
             message = None
 
         if not message:
-            logger.error(
-                "Failed to get notification message content",
-                notification_id=notification_id,
-            )
+            logger.error(f"Failed to get notification message content for {notification_id}")
             recipient.status = NotificationStatus.FAILED
             await db_session.commit()
             return {
@@ -128,10 +114,7 @@ async def send_line_notification_task(
 
         # Validate recipient can receive LINE notifications
         if not await _validate_line_recipient(db_session, uuid.UUID(recipient_id)):
-            logger.warning(
-                "Recipient not configured for LINE notifications",
-                recipient_id=recipient_id,
-            )
+            logger.warning(f"Recipient not configured for LINE notifications: {recipient_id}")
             recipient.status = NotificationStatus.FAILED
             await db_session.commit()
             return {
@@ -143,10 +126,7 @@ async def send_line_notification_task(
         # Get recipient's LINE user ID
         line_user_id = await _get_line_user_id(db_session, uuid.UUID(recipient_id))
         if not line_user_id:
-            logger.error(
-                "Recipient LINE user ID not found",
-                recipient_id=recipient_id,
-            )
+            logger.error(f"Recipient LINE user ID not found: {recipient_id}")
             recipient.status = NotificationStatus.FAILED
             await db_session.commit()
             return {
@@ -195,14 +175,7 @@ async def send_line_notification_task(
             }
 
     except Exception as e:
-        logger.error(
-            "LINE notification sending task exception",
-            notification_id=notification_id,
-            recipient_id=recipient_id,
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
+        logger.error(f"LINE notification sending task exception for {notification_id}/{recipient_id}: {str(e)}")
 
         if db_session:
             await db_session.rollback()
@@ -317,9 +290,6 @@ async def _mock_send_line_message(
     success = random.random() > 0.05
 
     if not success:
-        logger.warning(
-            "MOCK: LINE message failed to send",
-            line_user_id=line_user_id,
-        )
+        logger.warning(f"MOCK: LINE message failed to send to {line_user_id}")
 
     return success

@@ -76,7 +76,7 @@ class CertificateServiceProvider:
             return certificates_list
 
         except Exception as e:
-            logger.error(f"Failed to retrieve certificates: {str(e)}", exc_info=True)
+            logger.error(f"Failed to retrieve certificates: {str(e)}")
             raise RuntimeError("CERTIFICATE_TYPES_RETRIEVAL_FAILED")
 
     async def update_certificate(
@@ -124,10 +124,7 @@ class CertificateServiceProvider:
             raise ValueError("CERTIFICATE_CODE_EXISTS")
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to update certificate {certificate_id}: {str(e)}",
-                exc_info=True,
-            )
+            logger.error(f"Failed to update certificate {certificate_id}: {str(e)}")
             raise RuntimeError("CERTIFICATE_TYPE_UPDATE_FAILED")
 
     async def archive_certificate(self, certificate_id: uuid.UUID) -> Dict[str, Any]:
@@ -178,10 +175,7 @@ class CertificateServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to archive certificate {certificate_id}: {str(e)}",
-                exc_info=True,
-            )
+            logger.error(f"Failed to archive certificate {certificate_id}: {str(e)}")
             raise RuntimeError("CERTIFICATE_TYPE_ARCHIVE_FAILED")
 
     # Helper Methods

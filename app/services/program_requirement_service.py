@@ -112,9 +112,7 @@ class ProgramRequirementServiceProvider:
                 raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to create program requirement: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to create program requirement: {str(e)}")
             raise RuntimeError("PROGRAM_REQUIREMENT_CREATION_FAILED")
 
     async def archive_requirement(self, requirement_id: uuid.UUID) -> Dict[str, Any]:
@@ -162,9 +160,7 @@ class ProgramRequirementServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to archive program requirement: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to archive program requirement: {str(e)}")
             raise RuntimeError("PROGRAM_REQUIREMENT_ARCHIVE_FAILED")
 
     async def update_requirement(
@@ -251,9 +247,7 @@ class ProgramRequirementServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to update program requirement: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to update program requirement: {str(e)}")
             raise RuntimeError("PROGRAM_REQUIREMENT_UPDATE_FAILED")
 
     async def get_requirement_details(
@@ -367,10 +361,7 @@ class ProgramRequirementServiceProvider:
             return response_data.model_dump()
 
         except Exception as e:
-            logger.error(
-                f"Failed to retrieve program requirement details: {str(e)}",
-                exc_info=True,
-            )
+            logger.error(f"Failed to retrieve program requirement details: {str(e)}")
             raise RuntimeError("PROGRAM_REQUIREMENT_RETRIEVAL_FAILED")
 
     # Helper Methods

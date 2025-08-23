@@ -629,7 +629,7 @@ class CertificateSubmission(Base, AuditMixin):
     certificate_type: Mapped["CertificateType"] = relationship(
         back_populates="certificate_submissions"
     )
-    requirement_schedule: Mapped[Optional["ProgramRequirementSchedule"]] = relationship(
+    requirement_schedule: Mapped["ProgramRequirementSchedule"] = relationship(
         back_populates="certificate_submissions"
     )
     verification_history: Mapped[List["VerificationHistory"]] = relationship(

@@ -84,10 +84,7 @@ async def create_notification_task(
         )
 
         if not service:
-            logger.error(
-                "No service found for notification code",
-                notification_code=notification_code,
-            )
+            logger.error(f"No service found for notification code: {notification_code}")
             return {
                 "success": False,
                 "error": f"No service found for notification code: {notification_code}",
@@ -127,11 +124,7 @@ async def create_notification_task(
                 "request_id": request_id,
             }
         else:
-            logger.error(
-                "Failed to create notification",
-                notification_code=notification_code,
-                entity_id=entity_id,
-            )
+            logger.error(f"Failed to create notification {notification_code} for entity {entity_id}")
             return {
                 "success": False,
                 "error": "Failed to create notification",
@@ -139,14 +132,7 @@ async def create_notification_task(
             }
 
     except Exception as e:
-        logger.error(
-            "Notification creation task exception",
-            notification_code=notification_code,
-            entity_id=entity_id,
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
+        logger.error(f"Notification creation task exception {notification_code}/{entity_id}: {str(e)}")
 
         if db_session:
             await db_session.rollback()

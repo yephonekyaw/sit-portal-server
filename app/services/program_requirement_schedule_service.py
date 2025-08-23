@@ -202,7 +202,7 @@ class ProgramRequirementScheduleServiceProvider:
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to create schedule: {str(e)}", exc_info=True)
+            logger.error(f"Failed to create schedule: {str(e)}")
             raise RuntimeError("SCHEDULE_CREATION_FAILED")
 
     async def update_schedule(
@@ -283,9 +283,7 @@ class ProgramRequirementScheduleServiceProvider:
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to update schedule {schedule_id}: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to update schedule {schedule_id}: {str(e)}")
             raise RuntimeError("SCHEDULE_UPDATE_FAILED")
 
     async def get_all_schedules_with_details(self) -> Dict[str, Any]:
@@ -299,8 +297,8 @@ class ProgramRequirementScheduleServiceProvider:
                     Program.program_code,
                     Program.program_name,
                     CertificateType.id.label("cert_id"),
-                    CertificateType.code.label("cert_code"),
-                    CertificateType.name.label("cert_name"),
+                    CertificateType.cert_code,
+                    CertificateType.cert_name,
                     AcademicYear.year_code.label("academic_year"),
                     ProgramRequirement.name.label("requirement_name"),
                     ProgramRequirement.target_year,
@@ -406,7 +404,7 @@ class ProgramRequirementScheduleServiceProvider:
             return response_data.model_dump()
 
         except Exception as e:
-            logger.error(f"Failed to retrieve schedules: {str(e)}", exc_info=True)
+            logger.error(f"Failed to retrieve schedules: {str(e)}")
             raise RuntimeError("SCHEDULES_RETRIEVAL_FAILED")
 
     # Helper Methods

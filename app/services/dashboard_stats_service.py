@@ -70,13 +70,7 @@ class DashboardStatsService:
         await self.db.commit()
         await self.db.refresh(dashboard_stats)
 
-        logger.info(
-            "Created dashboard stats for new schedule",
-            schedule_id=str(schedule.id),
-            program_code=schedule.program_requirement.program.program_code,
-            academic_year_code=schedule.academic_year.year_code,
-            total_submissions_required=total_submissions_required,
-        )
+        logger.info(f"Created dashboard stats for schedule {schedule.id} - {schedule.program_requirement.program.program_code} year {schedule.academic_year.year_code}: {total_submissions_required} students")
 
         return dashboard_stats
 
@@ -133,13 +127,7 @@ class DashboardStatsService:
 
         self.db.add(dashboard_stats)
 
-        logger.info(
-            "Created dashboard stats for schedule data",
-            schedule_id=str(schedule_data["id"]),
-            program_code=program_code,
-            academic_year_code=academic_year_code,
-            total_submissions_required=total_submissions_required,
-        )
+        logger.info(f"Created dashboard stats for schedule {schedule_data['id']} - {program_code} year {academic_year_code}: {total_submissions_required} students")
 
         return dashboard_stats
 

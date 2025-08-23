@@ -74,7 +74,7 @@ class ProgramServiceProvider:
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
             await self.db.rollback()
-            logger.error(f"Failed to create program: {str(e)}", exc_info=True)
+            logger.error(f"Failed to create program: {str(e)}")
             raise RuntimeError("PROGRAM_CREATION_FAILED")
 
     async def update_program(
@@ -127,9 +127,7 @@ class ProgramServiceProvider:
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to update program {program_id}: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to update program {program_id}: {str(e)}")
             raise RuntimeError("PROGRAM_UPDATE_FAILED")
 
     async def archive_program(self, program_id: uuid.UUID) -> Dict[str, Any]:
@@ -176,9 +174,7 @@ class ProgramServiceProvider:
 
         except Exception as e:
             await self.db.rollback()
-            logger.error(
-                f"Failed to archive program {program_id}: {str(e)}", exc_info=True
-            )
+            logger.error(f"Failed to archive program {program_id}: {str(e)}")
             raise RuntimeError("PROGRAM_ARCHIVE_FAILED")
 
     async def get_all_programs_with_counts(
@@ -218,7 +214,7 @@ class ProgramServiceProvider:
             return programs_list
 
         except Exception as e:
-            logger.error(f"Failed to retrieve programs: {str(e)}", exc_info=True)
+            logger.error(f"Failed to retrieve programs: {str(e)}")
             raise RuntimeError("PROGRAMS_RETRIEVAL_FAILED")
 
     # Helper Methods
@@ -344,7 +340,7 @@ class ProgramServiceProvider:
     @staticmethod
     def build_archive_message(archived_requirements_count: int) -> str:
         """Build archive success message with requirement count"""
-        return "Program archived successfully"
+        return f"{archived_requirements_count} program{'s' if archived_requirements_count != 1 else ''} archived successfully"
 
 
 # Dependency injection for service provider

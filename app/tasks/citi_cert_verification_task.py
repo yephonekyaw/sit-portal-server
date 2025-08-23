@@ -41,22 +41,12 @@ async def verify_certificate_task(self, request_id: str, submission_id: str):
         )
 
         if not result["success"]:
-            logger.error(
-                "Certificate verification task failed",
-                submission_id=submission_id,
-                error=result.get("error"),
-            )
+            logger.error(f"Certificate verification task failed for {submission_id}: {result.get('error')}")
 
         return result
 
     except Exception as e:
-        logger.error(
-            "Certificate verification task exception",
-            submission_id=submission_id,
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
+        logger.error(f"Certificate verification task exception for {submission_id}: {str(e)}")
         if db_session:
             await db_session.rollback()
         return {

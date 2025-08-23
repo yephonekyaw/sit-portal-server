@@ -52,10 +52,7 @@ async def process_notification_task(self, request_id: str, notification_id: str)
         notification = result.scalar_one_or_none()
 
         if not notification:
-            logger.error(
-                "Notification not found",
-                notification_id=notification_id,
-            )
+            logger.error(f"Notification not found: {notification_id}")
             return {
                 "success": False,
                 "error": "Notification not found",
@@ -119,13 +116,7 @@ async def process_notification_task(self, request_id: str, notification_id: str)
         }
 
     except Exception as e:
-        logger.error(
-            "Notification processing task exception",
-            notification_id=notification_id,
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
+        logger.error(f"Notification processing task exception for {notification_id}: {str(e)}")
 
         if db_session:
             await db_session.rollback()

@@ -43,12 +43,7 @@ class StudentService:
 
         count = result.scalar_one()
 
-        logger.info(
-            "Retrieved active student count",
-            program_code=program_code,
-            academic_year_code=academic_year_code,
-            count=count,
-        )
+        logger.info(f"Retrieved active student count: {count} for program {program_code} year {academic_year_code}")
 
         return count
 
