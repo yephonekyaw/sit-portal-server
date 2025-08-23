@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, Optional, Sequence
+from typing import Dict, Any, Sequence
 import uuid
 
 from fastapi import Depends
@@ -10,9 +10,6 @@ from app.utils.logging import get_logger
 from app.db.models import (
     CertificateSubmission,
     Student,
-    User,
-    Program,
-    CertificateType,
     ProgramRequirement,
     ProgramRequirementSchedule,
     AcademicYear,
@@ -25,7 +22,6 @@ from app.schemas.staff.certificate_submission_schemas import (
     VerificationHistoryResponse,
     VerificationHistoryListResponse,
     CreateVerificationHistoryRequest,
-    CertificateSubmissionDataResponse,
     UserInfo,
     StudentInfo,
     ProgramInfo,
@@ -55,7 +51,9 @@ class SubmissionServiceProvider:
             else:
                 return await self._get_non_submitted_certificates_by_year(year_code)
         except Exception as e:
-            logger.error(f"Failed to get certificate submissions for year {year_code}: {str(e)}")
+            logger.error(
+                f"Failed to get certificate submissions for year {year_code}: {str(e)}"
+            )
             raise RuntimeError(f"CERTIFICATE_SUBMISSIONS_RETRIEVAL_FAILED: {str(e)}")
 
     async def get_verification_history_by_submission_id(
@@ -84,24 +82,10 @@ class SubmissionServiceProvider:
         except ValueError as e:
             raise e
         except Exception as e:
-            logger.error(f"Failed to get verification history for submission {submission_id}: {str(e)}")
+            logger.error(
+                f"Failed to get verification history for submission {submission_id}: {str(e)}"
+            )
             raise RuntimeError(f"VERIFICATION_HISTORY_RETRIEVAL_FAILED: {str(e)}")
-
-    async def get_certificate_submission_by_id(
-        self, submission_id: uuid.UUID
-    ) -> Optional[CertificateSubmissionResponse]:
-        """Get complete certificate submission data by ID with all related information"""
-        try:
-            submission = await self._fetch_submission_with_relations(submission_id)
-
-            if not submission:
-                return None
-
-            return self._transform_submission_to_response(submission)
-
-        except Exception as e:
-            logger.error(f"Failed to get certificate submission by ID {submission_id}: {str(e)}")
-            raise RuntimeError(f"CERTIFICATE_SUBMISSION_RETRIEVAL_FAILED: {str(e)}")
 
     async def create_verification_history(
         self,
@@ -128,10 +112,10 @@ class SubmissionServiceProvider:
         except ValueError as e:
             raise e
         except Exception as e:
-            logger.error(f"Failed to create verification history for submission {submission_id}: {str(e)}")
+            logger.error(
+                f"Failed to create verification history for submission {submission_id}: {str(e)}"
+            )
             raise RuntimeError(f"VERIFICATION_HISTORY_CREATION_FAILED: {str(e)}")
-
-    # ========== PRIVATE HELPER METHODS ==========
 
     async def _get_submitted_certificates_by_year(
         self, year_code: int
@@ -281,32 +265,6 @@ class SubmissionServiceProvider:
         history_result = await self.db.execute(history_query)
         return history_result.scalars().all()
 
-    async def _fetch_submission_with_relations(
-        self, submission_id: uuid.UUID
-    ) -> Optional[CertificateSubmission]:
-        """Fetch submission with all related information loaded"""
-        query = (
-            select(CertificateSubmission)
-            .options(
-                selectinload(CertificateSubmission.student).selectinload(Student.user),
-                selectinload(CertificateSubmission.student).selectinload(
-                    Student.program
-                ),
-                selectinload(CertificateSubmission.certificate_type),
-                selectinload(CertificateSubmission.requirement_schedule).selectinload(
-                    ProgramRequirementSchedule.program_requirement
-                ),
-                selectinload(CertificateSubmission.requirement_schedule).selectinload(
-                    ProgramRequirementSchedule.academic_year
-                ),
-                selectinload(CertificateSubmission.verification_history),
-            )
-            .where(CertificateSubmission.id == submission_id)
-        )
-
-        result = await self.db.execute(query)
-        return result.scalar_one_or_none()
-
     def _validate_status_change(self, old_status, new_status):
         """Validate that status change is valid"""
         if old_status == new_status:
@@ -334,8 +292,6 @@ class SubmissionServiceProvider:
         await self.db.refresh(new_verification)  # Refresh to get all fields
 
         return new_verification
-
-    # ========== TRANSFORMATION METHODS ==========
 
     def _transform_submission_to_response(
         self, submission: CertificateSubmission

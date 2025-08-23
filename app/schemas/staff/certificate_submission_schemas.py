@@ -172,27 +172,3 @@ class CreateVerificationHistoryRequest(BaseModel):
     agent_analysis_result: Optional[Dict[str, Any]] = Field(
         None, description="Agent analysis result data"
     )
-
-
-class CertificateSubmissionDataResponse(BaseModel):
-    """Response schema for certificate submission data only (no related information)"""
-
-    id: uuid.UUID = Field(..., description="Certificate submission ID")
-    student_id: uuid.UUID = Field(..., description="Student ID")
-    cert_type_id: uuid.UUID = Field(..., description="Certificate type ID")
-    requirement_schedule_id: Optional[uuid.UUID] = Field(
-        None, description="Program requirement schedule ID"
-    )
-    file_object_name: str = Field(..., description="File object name in storage")
-    filename: str = Field(..., description="Original filename")
-    file_size: int = Field(..., description="File size in bytes")
-    mime_type: str = Field(..., description="File MIME type")
-    submission_status: SubmissionStatus = Field(..., description="Submission status")
-    agent_confidence_score: Optional[float] = Field(
-        None, description="Agent confidence score"
-    )
-    submission_timing: SubmissionTiming = Field(..., description="Submission timing")
-    submitted_at: datetime = Field(..., description="Submission timestamp")
-    expired_at: Optional[datetime] = Field(None, description="Expiration timestamp")
-    created_at: datetime = Field(..., description="Creation timestamp")
-    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
