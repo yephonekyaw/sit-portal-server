@@ -1,13 +1,15 @@
 import uuid
 from datetime import datetime, timezone
 
+from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import (
     DashboardStats,
     ProgramRequirementSchedule,
 )
-from app.services.student_service_provider import StudentServiceProvider
+from app.db.session import get_async_session
+from app.services.student_service import get_student_service
 from app.utils.logging import get_logger
 
 logger = get_logger()
@@ -18,7 +20,7 @@ class DashboardStatsService:
 
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
-        self.student_service = StudentServiceProvider(db_session)
+        self.student_service = get_student_service(db_session)
 
     async def create_dashboard_stats_for_schedule(
         self, schedule: ProgramRequirementSchedule
@@ -140,3 +142,9 @@ class DashboardStatsService:
         )
 
         return dashboard_stats
+
+
+def get_dashboard_stats_service(
+    db: AsyncSession = Depends(get_async_session),
+) -> DashboardStatsService:
+    return DashboardStatsService(db)

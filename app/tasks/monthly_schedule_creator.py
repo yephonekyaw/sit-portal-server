@@ -15,7 +15,7 @@ from app.db.models import (
     ProgramRequirementSchedule,
     AcademicYear,
 )
-from app.services.dashboard_stats_service import DashboardStatsService
+from app.services.dashboard_stats_service import get_dashboard_stats_service
 from app.utils.logging import get_logger
 from app.utils.errors import DatabaseError
 
@@ -191,19 +191,20 @@ async def monthly_schedule_creator_task(self, request_id: str):
             created_count = len(created_schedules)
 
             # Create dashboard stats for each new schedule
-            dashboard_service = DashboardStatsService(db_session)
+            dashboard_service = get_dashboard_stats_service(db_session)
             for schedule_data in schedules_to_create:
                 # Find the corresponding requirement for additional data
                 requirement = next(
-                    req for req in program_requirements 
+                    req
+                    for req in program_requirements
                     if req.id == schedule_data["program_requirement_id"]
                 )
-                
+
                 # Get academic year for the student cohort
                 academic_year_result = await db_session.get(
                     AcademicYear, schedule_data["academic_year_id"]
                 )
-                
+
                 if academic_year_result:
                     await dashboard_service.create_dashboard_stats_for_schedule_data(
                         schedule_data=schedule_data,
