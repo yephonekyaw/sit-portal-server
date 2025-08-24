@@ -14,6 +14,8 @@ from app.utils.logging import get_logger
 from .programs_seed import seed_programs
 from .academic_years_seed import seed_academic_years
 from .certificate_types_seed import seed_certificate_types
+from .program_requirements_seed import seed_program_requirements
+from .program_requirement_schedules_seed import seed_program_requirement_schedules
 from .notification_types_seed import seed_notification_types
 from .notification_channel_templates_seed import seed_notification_channel_templates
 from .roles_seed import seed_roles
@@ -49,6 +51,8 @@ async def seed_all_data():
 
             # Phase 2: Tables with single dependencies
             logger.info("Phase 2: Seeding dependent tables...")
+            await seed_program_requirements(db_session)  # Depends on programs + certificate_types
+            await seed_program_requirement_schedules(db_session)  # Depends on program_requirements + academic_years
             await seed_notification_channel_templates(db_session)
             await seed_permissions(db_session)  # Depends on programs + roles
             await seed_users_students(
