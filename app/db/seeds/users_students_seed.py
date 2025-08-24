@@ -117,12 +117,12 @@ async def seed_users_students(db_session: AsyncSession):
     students = []
 
     # Create users and students
-    for roll_number, email, first_name, last_name in students_data:
+    for student_id, email, first_name, last_name in students_data:
         # Create user
         user_id = uuid.uuid4()
         user = User(
             id=user_id,
-            email=email,
+            username=student_id,
             first_name=first_name,
             last_name=last_name,
             user_type=UserType.STUDENT,
@@ -136,7 +136,7 @@ async def seed_users_students(db_session: AsyncSession):
             id=uuid.uuid4(),
             user_id=user_id,
             sit_email=email,
-            roll_number=roll_number,
+            student_id=student_id,
             program_id=program.id,
             academic_year_id=academic_year.id,
             enrollment_status=EnrollmentStatus.ACTIVE,

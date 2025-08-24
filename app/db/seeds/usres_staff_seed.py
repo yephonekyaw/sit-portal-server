@@ -22,7 +22,7 @@ async def seed_users_staff(db_session: AsyncSession):
     # Create user
     user = User(
         id=user_id,
-        email="julian.san@ad.sit.kmutt.ac.th",
+        username="julian.san",
         first_name="Julian",
         last_name="San",
         user_type=UserType.STAFF,

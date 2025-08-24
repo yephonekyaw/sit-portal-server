@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     """Pydantic v2 doesn't support parsing List[str] from a plain comma-separated string by default anymore."""
     ALLOWED_HOSTS: Union[str, List[str]] = "<your-allowed-host-1,<your-allowed-host-2>>"
     LOG_LEVEL: str = "<your-log-level>"
+    COOKIE_DOMAIN: str = "<your-cookie-domain>"
 
     # Google Cloud
     GEMINI_API_KEY: str = "<your-gemini-api-key>"
@@ -65,6 +66,11 @@ class Settings(BaseSettings):
     LINE_KID: str = "<your-line-kid>"
     LINE_CHANNEL_ID: str = "<your-line-channel-id>"
     LINE_CHANNEL_SECRET: str = "<your-line-channel-secret>"
+
+    # LDAP Config
+    LDAP_SERVER: str = "<your-ldap-server>"
+    LDAP_STAFF_BASE_DN: str = "<your-ldap-staff-base-dn>"
+    LDAP_STUDENT_BASE_DN: str = "<your-ldap-student-base-dn>"
 
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:

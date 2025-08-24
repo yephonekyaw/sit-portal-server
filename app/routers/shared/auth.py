@@ -20,11 +20,10 @@ auth_router = APIRouter()
 async def login(
     login_request: LoginRequest,
     request: Request,
-    response: Response,
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
     """
-    Login user with email and password.
+    Login user with username and password.
 
     Sets secure HTTP-only cookies for tokens and client-accessible CSRF token.
     """
@@ -32,26 +31,54 @@ async def login(
 
     try:
         tokens, user = await auth_service.login_user(
-            login_request.email, login_request.password
+            login_request.username, login_request.password
         )
 
-        # Set secure HTTP-only cookies for tokens
+        user_data = UserResponse(
+            id=str(user.id),
+            username=user.username,
+            first_name=user.first_name,
+            last_name=user.last_name,
+            user_type=user.user_type.value,
+            is_active=user.is_active,
+        )
+
+        # When returning the response object directly instead of returning data structure,
+        # we need to use the actual response object to attach the cookies onto
+        # Latter case, we can use temporal response object as FastAPI will reconstruct the
+        # actual response object and attach the cookies from the temporal response before
+        # sending it to the client. Visit: https://fastapi.tiangolo.com/advanced/response-cookies/#return-a-response-directly
+        response = ResponseBuilder.success(
+            request=request,
+            data=user_data.model_dump(by_alias=True),
+            message="Login successful",
+        )
+
+        # Determine environment settings
+        is_production = settings.ENVIRONMENT == "production"
+        cookie_domain = settings.COOKIE_DOMAIN
+
+        # Set secure HTTP-only cookies for tokens on the actual response
         response.set_cookie(
             key="access_token",
             value=tokens.access_token,
             httponly=True,
-            secure=True,  # Use HTTPS in production
-            samesite="strict",
+            secure=is_production,
+            samesite="lax",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
         response.set_cookie(
             key="refresh_token",
             value=tokens.refresh_token,
             httponly=True,
-            secure=True,
-            samesite="strict",
+            secure=is_production,
+            samesite="lax",
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
         # Set client-accessible CSRF token
@@ -59,25 +86,14 @@ async def login(
             key="csrf_token",
             value=tokens.csrf_token,
             httponly=False,  # Client needs access to this
-            secure=True,
-            samesite="strict",
+            secure=is_production,
+            samesite="lax",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
-        user_data = UserResponse(
-            id=str(user.id),
-            email=user.email,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            user_type=user.user_type.value,
-            is_active=user.is_active,
-        )
-
-        return ResponseBuilder.success(
-            request=request,
-            data=user_data.model_dump(),
-            message="Login successful",
-        )
+        return response
 
     except AuthenticationError:
         raise
@@ -88,7 +104,6 @@ async def login(
 @auth_router.post("/logout")
 async def logout(
     request: Request,
-    response: Response,
     current_user: Annotated[AuthState, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_async_session)],
 ):
@@ -98,18 +113,39 @@ async def logout(
     # Invalidate refresh token in database
     await auth_service.logout_user(current_user.user_id)
 
-    # Clear all authentication cookies
+    response = ResponseBuilder.success(request=request, message="Logout successful")
+
+    # Determine environment settings
+    is_production = settings.ENVIRONMENT == "production"
+    cookie_domain = settings.COOKIE_DOMAIN
+
+    # Clear all authentication cookies with consistent settings
     response.delete_cookie(
-        key="access_token", httponly=True, secure=True, samesite="strict"
+        key="access_token",
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        domain=cookie_domain,
+        path="/",
     )
     response.delete_cookie(
-        key="refresh_token", httponly=True, secure=True, samesite="strict"
+        key="refresh_token",
+        httponly=True,
+        secure=is_production,
+        samesite="lax",
+        domain=cookie_domain,
+        path="/",
     )
     response.delete_cookie(
-        key="csrf_token", httponly=False, secure=True, samesite="strict"
+        key="csrf_token",
+        httponly=False,
+        secure=is_production,
+        samesite="lax",
+        domain=cookie_domain,
+        path="/",
     )
 
-    return ResponseBuilder.success(request=request, message="Logout successful")
+    return response
 
 
 @auth_router.get("/me")
@@ -127,7 +163,7 @@ async def get_current_user_info(
 
     user_data = UserResponse(
         id=str(user.id),
-        email=user.email,
+        username=user.username,
         first_name=user.first_name,
         last_name=user.last_name,
         user_type=user.user_type.value,
@@ -136,35 +172,6 @@ async def get_current_user_info(
 
     return ResponseBuilder.success(
         request=request,
-        data=user_data.model_dump(),
+        data=user_data.model_dump(by_alias=True),
         message="User information retrieved",
-    )
-
-
-@auth_router.post("/logout-all-sessions")
-async def logout_all_sessions(
-    request: Request,
-    response: Response,
-    current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
-):
-    """Logout from all sessions by invalidating all user tokens"""
-    auth_service = AuthService(db)
-
-    # Invalidate all sessions
-    await auth_service.invalidate_all_sessions(current_user.user_id)
-
-    # Clear cookies
-    response.delete_cookie(
-        key="access_token", httponly=True, secure=True, samesite="strict"
-    )
-    response.delete_cookie(
-        key="refresh_token", httponly=True, secure=True, samesite="strict"
-    )
-    response.delete_cookie(
-        key="csrf_token", httponly=False, secure=True, samesite="strict"
-    )
-
-    return ResponseBuilder.success(
-        request=request, message="Logged out from all sessions"
     )

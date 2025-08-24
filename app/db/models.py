@@ -117,7 +117,9 @@ class User(Base, AuditMixin):
         default=uuid.uuid4,
         server_default=func.gen_random_uuid(),
     )
-    email: Mapped[str] = mapped_column(String(320), unique=True)  # RFC 5321 max length
+    username: Mapped[str] = mapped_column(
+        String(320), unique=True
+    )  # RFC 5321 max length
     first_name: Mapped[str] = mapped_column(String(100), nullable=False)
     last_name: Mapped[str] = mapped_column(String(100), nullable=False)
     user_type: Mapped[UserType] = mapped_column(Enum(UserType), nullable=False)
@@ -141,7 +143,7 @@ class User(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
-        Index("idx_users_email", "email"),
+        Index("idx_users_username", "username"),
         Index("idx_users_type_active", "user_type", "is_active"),
         Index("idx_users_last_login", "last_login"),
     )
@@ -616,7 +618,7 @@ class Student(Base, AuditMixin):
         nullable=False,
     )
     sit_email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
-    roll_number: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
+    student_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     program_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
         ForeignKey("programs.id", ondelete="RESTRICT"),
@@ -646,7 +648,7 @@ class Student(Base, AuditMixin):
         Index("idx_students_program_id", "program_id"),
         Index("idx_students_academic_year_id", "academic_year_id"),
         Index("idx_students_enrollment_status", "enrollment_status"),
-        Index("idx_students_roll_number", "roll_number"),
+        Index("idx_students_student_id", "student_id"),
     )
 
 

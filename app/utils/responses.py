@@ -28,7 +28,8 @@ class ResponseBuilder:
             path=str(request.url.path),
         )
         return JSONResponse(
-            status_code=status_code, content=response.model_dump(exclude_none=True)
+            status_code=status_code,
+            content=response.model_dump(exclude_none=True),
         )
 
     @staticmethod

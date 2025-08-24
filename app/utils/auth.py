@@ -2,9 +2,9 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any
 import uuid
 import jwt
-import secrets
 from passlib.context import CryptContext
-from passlib.hash import bcrypt
+import bcrypt
+
 from app.config.settings import settings
 
 # Password hashing context
@@ -24,18 +24,8 @@ class AuthUtils:
     """Authentication utilities for JWT token management and password hashing"""
 
     @staticmethod
-    def hash_password(password: str) -> str:
-        """Hash a password using bcrypt"""
-        return pwd_context.hash(password)
-
-    @staticmethod
-    def verify_password(plain_password: str, hashed_password: str) -> bool:
-        """Verify a password against its hash"""
-        return pwd_context.verify(plain_password, hashed_password)
-
-    @staticmethod
     def generate_access_token(
-        user_id: str, email: str, user_type: str, token_version: int = 0
+        user_id: str, username: str, user_type: str, token_version: int = 0
     ) -> str:
         """Generate JWT access token with user information"""
         now = datetime.now(timezone.utc)
@@ -43,7 +33,7 @@ class AuthUtils:
 
         payload = {
             "sub": str(user_id),  # Subject (user ID)
-            "email": email,
+            "username": username,
             "user_type": user_type,
             "token_version": token_version,
             "iat": now,  # Issued at
@@ -77,7 +67,7 @@ class AuthUtils:
     def generate_csrf_token(access_token: str) -> str:
         """Generate CSRF token by hashing the access token"""
         # Use bcrypt to hash the access token for CSRF protection
-        return bcrypt.hash(access_token)
+        return bcrypt.hashpw(access_token.encode(), bcrypt.gensalt()).decode()
 
     @staticmethod
     def verify_access_token(token: str) -> Optional[Dict[str, Any]]:
@@ -119,17 +109,17 @@ class AuthUtils:
     def verify_csrf_token(access_token: str, csrf_token: str) -> bool:
         """Verify CSRF token against access token"""
         try:
-            return bcrypt.verify(access_token, csrf_token)
+            return bcrypt.checkpw(access_token.encode(), csrf_token.encode())
         except Exception:
             return False
 
     @staticmethod
     def create_token_set(
-        user_id: str, email: str, user_type: str, token_version: int = 0
+        user_id: str, username: str, user_type: str, token_version: int = 0
     ) -> AuthTokens:
         """Create a complete set of authentication tokens"""
         access_token = AuthUtils.generate_access_token(
-            user_id, email, user_type, token_version
+            user_id, username, user_type, token_version
         )
         refresh_token = AuthUtils.generate_refresh_token(user_id)
         csrf_token = AuthUtils.generate_csrf_token(access_token)
@@ -139,11 +129,6 @@ class AuthUtils:
             refresh_token=refresh_token,
             csrf_token=csrf_token,
         )
-
-    @staticmethod
-    def generate_secure_token() -> str:
-        """Generate a cryptographically secure random token"""
-        return secrets.token_urlsafe(32)
 
     @staticmethod
     def is_token_expired(token: str, buffer_minutes: int = 2) -> bool:
@@ -166,21 +151,3 @@ class AuthUtils:
             return exp_datetime <= buffer_time
         except Exception:
             return True  # Treat any error as expired
-
-    @staticmethod
-    def get_token_expiry(token: str) -> Optional[datetime]:
-        """Get token expiration time"""
-        try:
-            payload = jwt.decode(
-                token,
-                settings.JWT_SECRET_KEY,
-                algorithms=[settings.JWT_ALGORITHM],
-                options={"verify_exp": False},
-            )
-
-            exp_timestamp = payload.get("exp")
-            if exp_timestamp:
-                return datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-            return None
-        except Exception:
-            return None

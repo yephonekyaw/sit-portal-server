@@ -2,10 +2,12 @@ from typing import Optional, Tuple
 from datetime import datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from ldap3 import Server, Connection
 
 from app.db.models import User
 from app.utils.auth import AuthUtils, AuthTokens
 from app.utils.errors import AuthenticationError
+from app.config.settings import settings
 
 
 class AuthService:
@@ -14,35 +16,53 @@ class AuthService:
     def __init__(self, db_session: AsyncSession):
         self.db = db_session
 
-    async def authenticate_user(self, email: str, password: str) -> Optional[User]:
-        """Authenticate user by email and password"""
-        # Get user by email
-        stmt = select(User).where(User.email == email, User.is_active == True)
+    async def authenticate_user(self, username: str, password: str) -> Optional[User]:
+        """Authenticate user by username and password via calling to the LDAP server"""
+        # Get user by username
+        stmt = select(User).where(User.username == username, User.is_active == True)
         result = await self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
         if not user:
             return None
 
-        # Verify password
-        if not AuthUtils.verify_password(password, user.password_hash):
+        # Determine base DN based on user type
+        if user.user_type.value == "student":
+            base_dn = settings.LDAP_STUDENT_BASE_DN
+        elif user.user_type.value == "staff":
+            base_dn = settings.LDAP_STAFF_BASE_DN
+        else:
+            return None
+
+        # Verify the identity via the organization LDAP server
+        ldap_server = Server(settings.LDAP_SERVER)
+        conn = Connection(
+            ldap_server,
+            user=f"uid={username},{base_dn}",
+            password=password,
+        )
+
+        if not conn.bind():
             return None
 
         return user
 
-    async def login_user(self, email: str, password: str) -> Tuple[AuthTokens, User]:
+    async def login_user(self, username: str, password: str) -> Tuple[AuthTokens, User]:
         """Login user and generate authentication tokens"""
         # Authenticate user
-        user = await self.authenticate_user(email, password)
+        user = await self.authenticate_user(username, password)
         if not user:
             raise AuthenticationError(
-                "Invalid email or password", "INVALID_CREDENTIALS"
+                "Invalid username or password", "INVALID_CREDENTIALS"
             )
 
-        # Generate token set
+        # Increment token version first for new login session
+        user.access_token_version += 1
+
+        # Generate token set with new version
         tokens = AuthUtils.create_token_set(
             user_id=str(user.id),
-            email=user.email,
+            username=user.username,
             user_type=user.user_type.value,
             token_version=user.access_token_version,
         )
@@ -73,16 +93,25 @@ class AuthService:
         if not user or user.refresh_token != refresh_token:
             return None
 
-        # Generate new token set
-        tokens = AuthUtils.create_token_set(
+        # Generate new access token with same version (no version increment during refresh)
+        new_access_token = AuthUtils.generate_access_token(
             user_id=str(user.id),
-            email=user.email,
+            username=user.username,
             user_type=user.user_type.value,
             token_version=user.access_token_version,
         )
 
-        # Update refresh token in database
-        user.refresh_token = tokens.refresh_token
+        # Generate new CSRF token for the new access token
+        new_csrf_token = AuthUtils.generate_csrf_token(new_access_token)
+
+        # Keep the existing refresh token (don't generate new one unless it's expired)
+        tokens = AuthTokens(
+            access_token=new_access_token,
+            refresh_token=refresh_token,  # Reuse existing refresh token
+            csrf_token=new_csrf_token,
+        )
+
+        # No need to update refresh_token or increment access_token_version
         await self.db.commit()
 
         return tokens
@@ -102,10 +131,6 @@ class AuthService:
         await self.db.commit()
 
         return True
-
-    async def invalidate_all_sessions(self, user_id: str) -> bool:
-        """Invalidate all user sessions by clearing refresh token and incrementing version"""
-        return await self.logout_user(user_id)
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID"""

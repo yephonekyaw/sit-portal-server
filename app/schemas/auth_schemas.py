@@ -1,19 +1,20 @@
-from typing import Optional
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import EmailStr, Field
+from .camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class LoginRequest(BaseModel):
     """Login request schema"""
 
-    email: EmailStr = Field(..., description="User email address")
-    password: str = Field(..., min_length=6, description="User password")
+    username: str = Field(..., description="Username")
+    password: str = Field(..., min_length=1, description="Password")
+    remember_me: bool = Field(True, description="Remember me option")
 
 
 class UserResponse(BaseModel):
     """User response schema"""
 
     id: str = Field(..., description="User ID")
-    email: str = Field(..., description="User email")
+    username: str = Field(..., description="Username")
     first_name: str = Field(..., description="First name")
     last_name: str = Field(..., description="Last name")
     user_type: str = Field(..., description="User type")
@@ -21,30 +22,3 @@ class UserResponse(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class LoginResponse(BaseModel):
-    """Login response schema"""
-
-    user: UserResponse = Field(..., description="User information")
-    message: str = Field(default="Login successful", description="Success message")
-
-
-class TokenResponse(BaseModel):
-    """Token response schema for refresh endpoint"""
-
-    message: str = Field(
-        default="Tokens refreshed successfully", description="Success message"
-    )
-
-
-class LogoutResponse(BaseModel):
-    """Logout response schema"""
-
-    message: str = Field(default="Logout successful", description="Success message")
-
-
-class ErrorResponse(BaseModel):
-    """Error response schema"""
-
-    detail: str = Field(..., description="Error message")

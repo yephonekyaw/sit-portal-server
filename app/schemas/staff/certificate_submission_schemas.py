@@ -16,7 +16,7 @@ class StudentInfo(BaseModel):
     """Student information schema"""
 
     sit_email: str = Field(..., description="Student's SIT email")
-    roll_number: str = Field(..., description="Student's roll number")
+    student_id: str = Field(..., description="Student's ID")
 
 
 class ProgramInfo(BaseModel):

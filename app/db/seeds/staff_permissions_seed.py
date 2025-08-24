@@ -18,9 +18,7 @@ async def seed_staff_permissions(db_session: AsyncSession):
 
     # Get Julian San's staff record
     staff_result = await db_session.execute(
-        select(Staff)
-        .join(User)
-        .where(User.email == "julian.san@ad.sit.kmutt.ac.th")
+        select(Staff).join(User).where(User.username == "julian.san")
     )
     staff = staff_result.scalar_one_or_none()
     if not staff:

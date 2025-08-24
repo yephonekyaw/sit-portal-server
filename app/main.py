@@ -6,7 +6,12 @@ from app.config.settings import settings
 from app.utils.logging import get_logger
 from app.routers.main import main_router
 from app.utils.errors import setup_error_handlers
-from app.middlewares import RequestIDMiddleware
+from app.middlewares import (
+    RequestIDMiddleware,
+    DevSecurityMiddleware,
+    ProdSecurityMiddleware,
+    AuthMiddleware,
+)
 
 # Initialize the logger
 logger = get_logger()
@@ -31,13 +36,19 @@ def create_application() -> FastAPI:
     # Add CORS middleware
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
+        allow_origins=["http://sitportal.test:5173", "http://localhost:5173"],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Content-Type", "Authorization", "authorization"],
     )
 
     # Add custom middlewares
+    application.add_middleware(
+        DevSecurityMiddleware
+        if settings.ENVIRONMENT == "development"
+        else ProdSecurityMiddleware
+    )
+    application.add_middleware(AuthMiddleware)
     application.add_middleware(RequestIDMiddleware)
 
     # Router

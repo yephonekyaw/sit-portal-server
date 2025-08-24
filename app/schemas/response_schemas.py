@@ -3,7 +3,9 @@ from enum import Enum
 from typing import Any, Dict, Optional, List
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import Field
+
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class ResponseStatus(str, Enum):

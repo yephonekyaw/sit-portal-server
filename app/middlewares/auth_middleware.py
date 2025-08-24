@@ -9,6 +9,9 @@ from app.db.session import get_async_session
 from app.utils.errors import AuthenticationError, AuthorizationError
 from app.utils.responses import ResponseBuilder
 from app.config.settings import settings
+from app.utils.logging import get_logger
+
+logger = get_logger()
 
 
 class AuthState:
@@ -17,14 +20,14 @@ class AuthState:
     def __init__(
         self,
         user_id: str,
-        email: str,
+        username: str,
         user_type: str,
         token_version: int,
         is_authenticated: bool = True,
         tokens_refreshed: bool = False,
     ):
         self.user_id = user_id
-        self.email = email
+        self.username = username
         self.user_type = user_type
         self.token_version = token_version
         self.is_authenticated = is_authenticated
@@ -40,7 +43,8 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/docs",
         "/redoc",
         "/openapi.json",
-        "/auth/login",
+        "/api/v1/shared/auth/login",
+        "/api/v1/shared/auth/logout",
     }
 
     def __init__(self, app, excluded_paths: Optional[set] = None):
@@ -82,7 +86,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 return response
 
-        except Exception:
+        except Exception as e:
             response = ResponseBuilder.error(
                 request=request,
                 message="Authentication failed",
@@ -141,11 +145,11 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         # Extract user information
         user_id = payload.get("sub")
-        email = payload.get("email")
+        username = payload.get("username")
         user_type = payload.get("user_type")
         token_version = payload.get("token_version", 0)
 
-        if not all([user_id, email, user_type]):
+        if not all([user_id, username, user_type]):
             return None
 
         # Verify token version with database
@@ -159,7 +163,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         return AuthState(
             user_id=str(user_id),
-            email=str(email),
+            username=str(username),
             user_type=str(user_type),
             token_version=token_version,
             tokens_refreshed=tokens_refreshed,
@@ -183,38 +187,50 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not new_tokens:
             return
 
+        # Determine environment settings
+        is_production = settings.ENVIRONMENT == "production"
+        cookie_domain = settings.COOKIE_DOMAIN
+
         # Set secure HTTP-only cookies for tokens
         response.set_cookie(
             key="access_token",
             value=new_tokens.access_token,
             httponly=True,
-            secure=True,
-            samesite="strict",
+            secure=is_production,
+            samesite="lax",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
         response.set_cookie(
             key="refresh_token",
             value=new_tokens.refresh_token,
             httponly=True,
-            secure=True,
-            samesite="strict",
+            secure=is_production,
+            samesite="lax",
             max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
         # Set client-accessible CSRF token
         response.set_cookie(
             key="csrf_token",
             value=new_tokens.csrf_token,
-            httponly=False,
-            secure=True,
-            samesite="strict",
+            httponly=False,  # Client needs access to this
+            secure=is_production,
+            samesite="lax",
             max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            domain=cookie_domain,
+            path="/",
         )
 
     def _extract_bearer_token(self, request: Request) -> Optional[str]:
         """Extract Bearer token from Authorization header"""
-        authorization = request.headers.get("Authorization")
+
+        authorization = request.headers.get("authorization", None)
+
         if not authorization:
             return None
 

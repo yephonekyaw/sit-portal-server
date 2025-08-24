@@ -316,7 +316,7 @@ class SubmissionServiceProvider:
             ),
             student=StudentInfo(
                 sit_email=submission.student.sit_email,
-                roll_number=submission.student.roll_number,
+                student_id=submission.student.student_id,
             ),
             program=ProgramInfo(
                 program_code=submission.student.program.program_code,
@@ -377,7 +377,7 @@ class SubmissionServiceProvider:
             ),
             "student": StudentInfo(
                 sit_email=student.sit_email,
-                roll_number=student.roll_number,
+                student_id=student.student_id,
             ),
             "program": ProgramInfo(
                 program_code=student.program.program_code,

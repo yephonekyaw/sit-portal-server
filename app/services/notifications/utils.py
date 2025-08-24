@@ -166,11 +166,11 @@ async def get_user_id_from_student_identifier(
     db: AsyncSession, identifier: str
 ) -> Optional[uuid.UUID]:
     """
-    Get user_id from student identifier (student ID, roll_number, or sit_email).
+    Get user_id from student identifier (student ID, student_id, or sit_email).
 
     Args:
         db: Database session
-        identifier: Student ID (UUID string), roll_number, or sit_email
+        identifier: Student ID (UUID string), student_id, or sit_email
 
     Returns:
         User ID if found, None otherwise
@@ -187,9 +187,9 @@ async def get_user_id_from_student_identifier(
         except ValueError:
             pass
 
-        # Try as roll_number or sit_email
+        # Try as student_id or sit_email
         stmt = select(Student.user_id).where(
-            or_(Student.roll_number == identifier, Student.sit_email == identifier)
+            or_(Student.student_id == identifier, Student.sit_email == identifier)
         )
 
         result = await db.execute(stmt)
