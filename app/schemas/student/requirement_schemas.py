@@ -1,50 +1,8 @@
-from datetime import datetime
 from typing import Optional
-from uuid import UUID
 
 from pydantic import Field, ConfigDict
 
-from app.db.models import SubmissionStatus, SubmissionTiming
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
-
-
-class CertificateSubmissionResponse(BaseModel):
-    """Response schema for certificate submission"""
-
-    id: UUID = Field(..., description="Submission ID")
-    student_id: UUID = Field(..., description="Student ID")
-    cert_type_id: UUID = Field(..., description="Certificate type ID")
-    requirement_schedule_id: UUID = Field(..., description="Requirement schedule ID")
-    file_object_name: str = Field(..., description="File object name in MinIO")
-    filename: str = Field(..., description="Original file name")
-    file_size: int = Field(..., description="File size in bytes")
-    mime_type: str = Field(..., description="File MIME type")
-    submission_status: SubmissionStatus = Field(
-        ..., description="Current submission status"
-    )
-    agent_confidence_score: Optional[float] = Field(
-        None, description="Agent confidence score"
-    )
-    submission_timing: SubmissionTiming = Field(
-        ..., description="Submission timing status"
-    )
-    submitted_at: datetime = Field(..., description="Timestamp when submitted")
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-class CertificateSubmissionCreate(BaseModel):
-    """Schema for creating a certificate submission (used internally)"""
-
-    student_id: UUID
-    cert_type_id: UUID
-    requirement_schedule_id: UUID
-    file_object_name: str
-    filename: str
-    file_size: int
-    mime_type: str
-    agent_confidence_score: float = 0.0
-    submission_timing: SubmissionTiming
 
 
 class StudentRequirementWithSubmissionResponse(BaseModel):
@@ -99,3 +57,21 @@ class StudentRequirementWithSubmissionResponse(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RequirementSubmissionRequest(BaseModel):
+    """Schema for student certificate submission request"""
+
+    schedule_id: str = Field(..., description="Program requirement schedule ID")
+    requirement_id: str = Field(..., description="Program requirement ID")
+    cert_type_id: str = Field(..., description="Certificate type ID")
+    program_id: str = Field(..., description="Program ID")
+    submission_id: Optional[str] = Field(
+        None, description="Existing submission ID (for updates)"
+    )
+
+
+class RequirementSubmissionResponse(BaseModel):
+    """Schema for successful submission response"""
+
+    submission_id: str = Field(..., description="Created submission ID")

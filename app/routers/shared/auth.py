@@ -12,6 +12,7 @@ from app.middlewares.auth_middleware import get_current_user, AuthState
 from app.config.settings import settings
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import AuthenticationError
+from app.utils.cookies import CookieUtils
 
 auth_router = APIRouter()
 
@@ -43,55 +44,15 @@ async def login(
             is_active=user.is_active,
         )
 
-        # When returning the response object directly instead of returning data structure,
-        # we need to use the actual response object to attach the cookies onto
-        # Latter case, we can use temporal response object as FastAPI will reconstruct the
-        # actual response object and attach the cookies from the temporal response before
-        # sending it to the client. Visit: https://fastapi.tiangolo.com/advanced/response-cookies/#return-a-response-directly
+        # Create response with user data
         response = ResponseBuilder.success(
             request=request,
             data=user_data.model_dump(by_alias=True),
             message="Login successful",
         )
 
-        # Determine environment settings
-        is_production = settings.ENVIRONMENT == "production"
-        cookie_domain = settings.COOKIE_DOMAIN
-
-        # Set secure HTTP-only cookies for tokens on the actual response
-        response.set_cookie(
-            key="access_token",
-            value=tokens.access_token,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            domain=cookie_domain,
-            path="/",
-        )
-
-        response.set_cookie(
-            key="refresh_token",
-            value=tokens.refresh_token,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-            domain=cookie_domain,
-            path="/",
-        )
-
-        # Set client-accessible CSRF token
-        response.set_cookie(
-            key="csrf_token",
-            value=tokens.csrf_token,
-            httponly=False,  # Client needs access to this
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            domain=cookie_domain,
-            path="/",
-        )
+        # Set authentication cookies using utility function
+        CookieUtils.set_auth_cookies(response, tokens)
 
         return response
 
@@ -115,35 +76,8 @@ async def logout(
 
     response = ResponseBuilder.success(request=request, message="Logout successful")
 
-    # Determine environment settings
-    is_production = settings.ENVIRONMENT == "production"
-    cookie_domain = settings.COOKIE_DOMAIN
-
-    # Clear all authentication cookies with consistent settings
-    response.delete_cookie(
-        key="access_token",
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
-        domain=cookie_domain,
-        path="/",
-    )
-    response.delete_cookie(
-        key="refresh_token",
-        httponly=True,
-        secure=is_production,
-        samesite="lax",
-        domain=cookie_domain,
-        path="/",
-    )
-    response.delete_cookie(
-        key="csrf_token",
-        httponly=False,
-        secure=is_production,
-        samesite="lax",
-        domain=cookie_domain,
-        path="/",
-    )
+    # Clear all authentication cookies using utility function
+    CookieUtils.clear_auth_cookies(response)
 
     return response
 

@@ -2,14 +2,15 @@ from typing import Optional, Callable
 from fastapi import Request, Response
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
+from typing import cast
 
 from app.utils.auth import AuthUtils
 from app.services.auth_service import AuthService
 from app.db.session import get_async_session
 from app.utils.errors import AuthenticationError, AuthorizationError
 from app.utils.responses import ResponseBuilder
-from app.config.settings import settings
 from app.utils.logging import get_logger
+from app.utils.cookies import CookieUtils
 
 logger = get_logger()
 
@@ -44,7 +45,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/redoc",
         "/openapi.json",
         "/api/v1/shared/auth/login",
-        "/api/v1/shared/auth/logout",
     }
 
     def __init__(self, app, excluded_paths: Optional[set] = None):
@@ -104,27 +104,36 @@ class AuthMiddleware(BaseHTTPMiddleware):
     ) -> Optional[AuthState]:
         """Authenticate request with automatic token refresh if needed"""
 
-        # Get CSRF token from Authorization header or cookiess
-        csrf_token = self._extract_bearer_token(request) or request.cookies.get(
-            "csrf_token"
-        )
-        if not csrf_token:
-            return None
-
-        # Get access token from cookies
+        # Get tokens from cookies and headers
+        csrf_token = CookieUtils.extract_bearer_token(
+            request.headers.get("authorization")
+        ) or request.cookies.get("csrf_token")
         access_token = request.cookies.get("access_token")
-        if not access_token:
+        refresh_token = request.cookies.get("refresh_token")
+
+        # If we don't have a refresh token, we can't authenticate
+        if not refresh_token:
             return None
 
-        # Check if access token is expired or will expire soon
-        if AuthUtils.is_token_expired(access_token, buffer_minutes=2):
-            # Try to refresh tokens automatically
+        # Check if we have valid access and csrf tokens
+        has_valid_tokens = access_token and csrf_token
+        tokens_expired = False
+
+        if has_valid_tokens:
+            # Check if access token is expired or will expire soon
+            tokens_expired = (
+                AuthUtils.is_token_expired(access_token, buffer_minutes=2)
+                if access_token
+                else True
+            )
+
+        # If we don't have tokens or they're expired, try to refresh
+        if not has_valid_tokens or tokens_expired:
             refreshed_tokens = await self._refresh_tokens_automatically(request)
             if refreshed_tokens:
-                # Use new access token and CSRF token
+                # Use new tokens
                 access_token = refreshed_tokens.access_token
                 csrf_token = refreshed_tokens.csrf_token
-
                 # Store new tokens in request for later cookie setting
                 request.state.new_tokens = refreshed_tokens
                 tokens_refreshed = True
@@ -135,11 +144,13 @@ class AuthMiddleware(BaseHTTPMiddleware):
             tokens_refreshed = False
 
         # Verify CSRF token against access token
-        if not AuthUtils.verify_csrf_token(access_token, csrf_token):
+        if not AuthUtils.verify_csrf_token(
+            cast(str, access_token), cast(str, csrf_token)
+        ):
             return None
 
         # Verify access token
-        payload = AuthUtils.verify_access_token(access_token)
+        payload = AuthUtils.verify_access_token(cast(str, access_token))
         if not payload:
             return None
 
@@ -175,11 +186,15 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not refresh_token:
             return None
 
-        # Use auth service to refresh tokens
-        async for session in get_async_session():
-            auth_service = AuthService(session)
-            new_tokens = await auth_service.refresh_tokens(refresh_token)
-            return new_tokens
+        try:
+            # Use auth service to refresh tokens
+            async for session in get_async_session():
+                auth_service = AuthService(session)
+                new_tokens = await auth_service.refresh_tokens(refresh_token)
+                return new_tokens
+        except Exception as e:
+            logger.warning(f"Token refresh failed: {e}")
+            return None
 
     async def _set_refreshed_cookies(self, request: Request, response: Response):
         """Set new cookies after token refresh"""
@@ -187,57 +202,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         if not new_tokens:
             return
 
-        # Determine environment settings
-        is_production = settings.ENVIRONMENT == "production"
-        cookie_domain = settings.COOKIE_DOMAIN
-
-        # Set secure HTTP-only cookies for tokens
-        response.set_cookie(
-            key="access_token",
-            value=new_tokens.access_token,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            domain=cookie_domain,
-            path="/",
-        )
-
-        response.set_cookie(
-            key="refresh_token",
-            value=new_tokens.refresh_token,
-            httponly=True,
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
-            domain=cookie_domain,
-            path="/",
-        )
-
-        # Set client-accessible CSRF token
-        response.set_cookie(
-            key="csrf_token",
-            value=new_tokens.csrf_token,
-            httponly=False,  # Client needs access to this
-            secure=is_production,
-            samesite="lax",
-            max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-            domain=cookie_domain,
-            path="/",
-        )
-
-    def _extract_bearer_token(self, request: Request) -> Optional[str]:
-        """Extract Bearer token from Authorization header"""
-
-        authorization = request.headers.get("authorization", None)
-
-        if not authorization:
-            return None
-
-        if not authorization.startswith("Bearer "):
-            return None
-
-        return authorization[7:]  # Remove "Bearer " prefix
+        CookieUtils.set_auth_cookies(response, new_tokens)
 
 
 class JWTBearer(HTTPBearer):
