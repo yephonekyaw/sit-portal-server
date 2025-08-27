@@ -210,7 +210,6 @@ def setup_error_handlers(app: FastAPI):
             meta={"error_type": "AUTHORIZATION_ERROR"},
         )
 
-
     @app.exception_handler(NotFoundError)
     async def not_found_exception_handler(request: Request, exc: NotFoundError):
         logger.error(f"Not Found Error: {exc.message}")

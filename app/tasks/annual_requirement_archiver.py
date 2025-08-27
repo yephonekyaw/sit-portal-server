@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from typing import List
-import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, update
@@ -16,20 +15,20 @@ from app.utils.errors import DatabaseError
 async def annual_requirement_archiver_task(self, request_id: str):
     """
     Annual task to archive expired program requirements.
-    
+
     Runs on the second Monday of August every year to:
     1. Calculate the current academic year
     2. Find all active program requirements where effective_until_year < current_academic_year
     3. Archive those requirements by setting is_active = False
-    
+
     This task helps maintain data integrity by automatically archiving requirements
     that are no longer applicable to new student cohorts.
-    
+
     Academic Year Logic:
     - Academic year runs August to May (e.g., Aug 2024 - May 2025 = Academic Year 2024)
     - Requirements with effective_until_year < current_academic_year are expired
     - Only active requirements (is_active = True) are considered for archiving
-    
+
     Args:
         request_id: Request ID for tracking purposes
     """
@@ -130,16 +129,16 @@ async def _get_expired_requirements(
 ) -> List[ProgramRequirement]:
     """
     Get all active program requirements that have expired.
-    
+
     A requirement is considered expired if:
     1. It is currently active (is_active = True)
     2. It has an effective_until_year set
     3. The effective_until_year is less than the current academic year
-    
+
     Args:
         db_session: Database session
         current_academic_year: Current academic year for comparison
-        
+
     Returns:
         List of expired ProgramRequirement objects
     """
@@ -166,13 +165,13 @@ async def _archive_expired_requirements(
 ) -> int:
     """
     Archive expired requirements by setting is_active = False.
-    
+
     Uses a batch update for efficiency while maintaining audit trail.
-    
+
     Args:
         db_session: Database session
         expired_requirements: List of requirements to archive
-        
+
     Returns:
         Number of requirements archived
     """

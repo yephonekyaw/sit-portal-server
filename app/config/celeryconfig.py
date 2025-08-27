@@ -6,7 +6,7 @@ broker_url = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:{setting
 result_backend = f"redis://:{settings.REDIS_PASSWORD}@{settings.REDIS_HOST}:{settings.REDIS_PORT}/{settings.REDIS_DB}"
 
 # Task Discovery
-imports = ["app.tasks"]
+include = ["app.tasks"]
 
 # Timezone Configuration
 timezone = "Asia/Bangkok"
@@ -40,7 +40,6 @@ task_retry_backoff = True
 task_retry_backoff_max = 700  # Max 700 seconds
 task_retry_jitter = False
 
-# Beat Schedule Configuration
 # All scheduled tasks use Asia/Bangkok timezone
 beat_schedule = {
     # Daily notification tasks - Run at 9:00 AM Bangkok time
@@ -88,38 +87,8 @@ beat_schedule = {
     },
 }
 
-# Queue Configuration
-task_routes = {
-    "app.tasks.notification_*": {"queue": "notifications"},
-    "app.tasks.daily_scheduled_processor.*": {"queue": "notifications"},
-    "app.tasks.daily_notification_expiration.*": {"queue": "notifications"},
-    "app.tasks.daily_requirement_schedule_notifier.*": {"queue": "notifications"},
-    "app.tasks.monthly_schedule_creator.*": {"queue": "schedules"},
-    "app.tasks.annual_requirement_archiver.*": {"queue": "schedules"},
-    "app.tasks.line_token_manager.*": {"queue": "line_api"},
-    "app.tasks.citi_cert_verification_task.*": {"queue": "verification"},
-}
-
 # Default Queue
-task_default_queue = "default"
+task_default_queue = "sitportal"
 
 # Beat Scheduler Configuration
 beat_schedule_filename = "app/celerybeat-schedule"
-
-# Environment-specific configurations
-if settings.ENVIRONMENT == "production":
-    # Production-specific settings
-    worker_concurrency = 4
-    worker_max_memory_per_child = 200000  # 200MB
-    task_time_limit = 60 * 60  # 1 hour in production
-    task_soft_time_limit = 55 * 60  # 55 minutes
-
-elif settings.ENVIRONMENT == "development":
-    # Development-specific settings
-    worker_concurrency = 2
-    task_always_eager = False  # Set to True to run tasks synchronously for debugging
-    task_eager_propagates = True
-else:
-    # Default/testing settings
-    worker_concurrency = 1
-    task_always_eager = False

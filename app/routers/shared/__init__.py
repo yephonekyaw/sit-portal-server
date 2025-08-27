@@ -4,6 +4,7 @@ from .auth import auth_router
 from .health import health_router
 from .notifications import notifications_router
 from .minio import minio_router
+from .bugs import bug_router
 
 shared_router = APIRouter()
 
@@ -18,3 +19,4 @@ shared_router.include_router(
     notifications_router, prefix="/notifications", tags=["Shared - Notifications"]
 )
 shared_router.include_router(minio_router, prefix="/minio", tags=["Shared - MinIO"])
+shared_router.include_router(bug_router, prefix="/bugs", tags=["Student - Bugs"])

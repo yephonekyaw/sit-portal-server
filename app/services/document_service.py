@@ -22,7 +22,7 @@ class DocumentService:
             "webp",
         }
         self.client = (
-            documentai_v1.DocumentProcessorServiceClient().from_service_account_json(
+            documentai_v1.DocumentProcessorServiceClient.from_service_account_json(
                 settings.GOOGLE_APPLICATION_CREDENTIALS
             )
         )

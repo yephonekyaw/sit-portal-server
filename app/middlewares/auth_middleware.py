@@ -45,6 +45,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/redoc",
         "/openapi.json",
         "/api/v1/shared/auth/login",
+        "/api/v1/shared/bugs/report",
     }
 
     def __init__(self, app, excluded_paths: Optional[set] = None):

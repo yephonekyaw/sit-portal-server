@@ -1,5 +1,7 @@
 from typing import Optional
 
+from fastapi import UploadFile
+from fastapi import File
 from pydantic import Field, ConfigDict
 
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
@@ -69,9 +71,5 @@ class RequirementSubmissionRequest(BaseModel):
     submission_id: Optional[str] = Field(
         None, description="Existing submission ID (for updates)"
     )
-
-
-class RequirementSubmissionResponse(BaseModel):
-    """Schema for successful submission response"""
-
-    submission_id: str = Field(..., description="Created submission ID")
+    file: UploadFile = File(..., description="Certificate file to upload")
+    model_config = {"extra": "forbid"}

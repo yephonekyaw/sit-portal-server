@@ -5,6 +5,7 @@ from .line_notification_sender import send_line_notification_task
 from .daily_scheduled_processor import daily_scheduled_notifications_processor_task
 from .daily_notification_expiration import daily_notification_expiration_task
 from .monthly_schedule_creator import monthly_schedule_creator_task
+from .bugs import report_bugs
 
 __all__ = [
     "verify_certificate_task",
