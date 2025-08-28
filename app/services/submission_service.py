@@ -239,11 +239,14 @@ class SubmissionServiceProvider:
         self, submission_id: uuid.UUID
     ) -> CertificateSubmission:
         """Validate that a submission exists"""
-        submission_query = select(CertificateSubmission).where(
-            CertificateSubmission.id == submission_id
-        )
-        submission_result = await self.db.execute(submission_query)
-        submission = submission_result.scalar_one_or_none()
+
+        submission = (
+            await self.db.execute(
+                select(CertificateSubmission).where(
+                    CertificateSubmission.id == submission_id
+                )
+            )
+        ).scalar_one_or_none()
 
         if not submission:
             raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")

@@ -36,9 +36,11 @@ class RequirementsService:
 
     async def get_student_by_user_id(self, user_id: str) -> Student:
         """Get student record by user ID with validation"""
-        student_stmt = select(Student).where(Student.user_id == UUID(user_id))
-        student_result = await self.db.execute(student_stmt)
-        student = student_result.scalar_one_or_none()
+        student = (
+            await self.db.execute(
+                select(Student).where(Student.user_id == UUID(user_id))
+            )
+        ).scalar_one_or_none()
 
         if not student:
             raise BusinessLogicError("Student not found")
@@ -354,3 +356,21 @@ class RequirementsService:
                 submission.expired_at.isoformat() if submission.expired_at else None
             ),
         )
+
+    async def validate_submission_ownership(
+        self, submission_id: UUID, student_id: UUID
+    ) -> None:
+        """Validate that a submission belongs to the specified student"""
+        submission = (
+            await self.db.execute(
+                select(CertificateSubmission).where(
+                    CertificateSubmission.id == submission_id
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not submission:
+            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
+
+        if submission.student_id != student_id:
+            raise ValueError("SUBMISSION_NOT_OWNED_BY_STUDENT")

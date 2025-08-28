@@ -73,7 +73,7 @@ def setup_error_handlers(app: FastAPI):
 
     @app.exception_handler(StarletteHTTPException)
     async def http_exception_handler(request: Request, exc: StarletteHTTPException):
-        logger.error(f"HTTP Exception: {exc.status_code} - {exc.detail}")
+        logger.error(f"HTTP Exception: {str(exc)}")
         return ResponseBuilder.error(
             request=request,
             message=str(exc.detail),
@@ -145,7 +145,7 @@ def setup_error_handlers(app: FastAPI):
 
     @app.exception_handler(DatabaseError)
     async def database_exception_handler(request: Request, exc: DatabaseError):
-        logger.error(f"Database Error: {exc.message}")
+        logger.error(f"Database Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,
@@ -172,7 +172,7 @@ def setup_error_handlers(app: FastAPI):
     async def business_logic_exception_handler(
         request: Request, exc: BusinessLogicError
     ):
-        logger.error(f"Business Logic Error: {exc.message}")
+        logger.error(f"Business Logic Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,
@@ -186,7 +186,7 @@ def setup_error_handlers(app: FastAPI):
     async def authentication_exception_handler(
         request: Request, exc: AuthenticationError
     ):
-        logger.error(f"Authentication Error: {exc.message}")
+        logger.error(f"Authentication Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,
@@ -200,7 +200,7 @@ def setup_error_handlers(app: FastAPI):
     async def authorization_exception_handler(
         request: Request, exc: AuthorizationError
     ):
-        logger.error(f"Authorization Error: {exc.message}")
+        logger.error(f"Authorization Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,
@@ -212,7 +212,7 @@ def setup_error_handlers(app: FastAPI):
 
     @app.exception_handler(NotFoundError)
     async def not_found_exception_handler(request: Request, exc: NotFoundError):
-        logger.error(f"Not Found Error: {exc.message}")
+        logger.error(f"Not Found Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,
@@ -226,7 +226,7 @@ def setup_error_handlers(app: FastAPI):
     async def line_application_exception_handler(
         request: Request, exc: LineApplicationError
     ):
-        logger.error(f"LINE Application Error: {exc.message}")
+        logger.error(f"LINE Application Error: {str(exc)}")
 
         return ResponseBuilder.error(
             request=request,

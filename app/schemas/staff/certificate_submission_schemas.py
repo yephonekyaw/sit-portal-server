@@ -1,8 +1,10 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
-from pydantic import BaseModel, Field
+from pydantic import Field
 import uuid
 from app.db.models import SubmissionStatus, SubmissionTiming, VerificationType
+
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class UserInfo(BaseModel):

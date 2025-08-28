@@ -1,6 +1,5 @@
 import asyncio
 import re
-import sys
 from uuid import UUID
 from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
@@ -31,11 +30,6 @@ class CitiProgramAutomationService:
 
     def __init__(self):
         self.minio_service = MinIOService()
-        if sys.platform == "win32":
-            try:
-                asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
-            except Exception:
-                pass  # Silently handle policy setting errors
 
     async def _download_certificate_from_url(self, url: str) -> Optional[bytes]:
         """Download certificate from CITI Program URL using Playwright automation."""

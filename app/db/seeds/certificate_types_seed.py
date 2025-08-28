@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
 from app.db.models import CertificateType
@@ -9,16 +9,16 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-async def seed_certificate_types(db_session: AsyncSession):
-    """Seed certificate types data - clear existing and add new"""
+def seed_certificate_types(db_session: Session):
+    """Sync version: Seed certificate types data - clear existing and add new"""
 
     # Clear existing certificate types
-    await db_session.execute(delete(CertificateType))
+    db_session.execute(delete(CertificateType))
 
     # Add certificate types
     certificate_types = [
         CertificateType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             cert_code="citi_program_certificate",
             cert_name="CITI Program Certificate",
             description="Certificate for CITI Program courses.",
@@ -29,5 +29,5 @@ async def seed_certificate_types(db_session: AsyncSession):
     ]
 
     db_session.add_all(certificate_types)
-    await db_session.commit()
+    db_session.commit()
     logger.info(f"Seeded {len(certificate_types)} certificate types")

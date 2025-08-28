@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
 from app.db.models import User, Staff, UserType
@@ -8,16 +8,16 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-async def seed_users_staff(db_session: AsyncSession):
-    """Seed staff data - clear existing and add new"""
+def seed_users_staff(db_session: Session):
+    """Sync version: Seed staff data - clear existing and add new"""
 
     # Clear existing staff and their users
-    await db_session.execute(delete(Staff))
+    db_session.execute(delete(Staff))
     # Note: Users will be cleared by the users_students_seed, so we only clear staff here
-    await db_session.commit()
+    db_session.commit()
 
     # Create staff user and staff record
-    user_id = uuid.uuid4()
+    user_id = str(uuid.uuid4())
 
     # Create user
     user = User(
@@ -32,7 +32,7 @@ async def seed_users_staff(db_session: AsyncSession):
 
     # Create staff
     staff = Staff(
-        id=uuid.uuid4(),
+        id=str(uuid.uuid4()),
         user_id=user_id,
         employee_id="10000000000",
         department="Computer Science",
@@ -40,5 +40,5 @@ async def seed_users_staff(db_session: AsyncSession):
 
     db_session.add(user)
     db_session.add(staff)
-    await db_session.commit()
+    db_session.commit()
     logger.info("Seeded 1 staff member: Julian San (Computer Science)")

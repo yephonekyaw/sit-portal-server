@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import delete
 
 from app.db.models import NotificationType, Priority
@@ -8,17 +8,17 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-async def seed_notification_types(db_session: AsyncSession):
-    """Seed notification types data - clear existing and add new"""
+def seed_notification_types(db_session: Session):
+    """Sync version: Seed notification types data - clear existing and add new"""
 
     # Clear existing notification types
-    await db_session.execute(delete(NotificationType))
+    db_session.execute(delete(NotificationType))
 
     # Add notification types
     notification_types = [
         # CertificateSubmission actions
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_submit",
             name="Certificate Submitted",
@@ -27,7 +27,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_update",
             name="Certificate Updated",
@@ -36,7 +36,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_delete",
             name="Certificate Deleted",
@@ -45,7 +45,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_verify",
             name="Certificate Verified",
@@ -54,7 +54,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_reject",
             name="Certificate Rejected",
@@ -63,7 +63,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="CertificateSubmission",
             code="certificate_submission_request",
             name="Certificate Review Requested",
@@ -73,7 +73,7 @@ async def seed_notification_types(db_session: AsyncSession):
         ),
         # ProgramRequirementSchedule actions
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="ProgramRequirementSchedule",
             code="program_requirement_schedule_remind",
             name="Requirement Reminder",
@@ -82,7 +82,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="ProgramRequirementSchedule",
             code="program_requirement_schedule_warn",
             name="Requirement Warning",
@@ -91,7 +91,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="ProgramRequirementSchedule",
             code="program_requirement_schedule_late",
             name="Requirement Late",
@@ -100,7 +100,7 @@ async def seed_notification_types(db_session: AsyncSession):
             is_active=True,
         ),
         NotificationType(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             entity_type="ProgramRequirementSchedule",
             code="program_requirement_schedule_overdue",
             name="Requirement Overdue",
@@ -111,5 +111,5 @@ async def seed_notification_types(db_session: AsyncSession):
     ]
 
     db_session.add_all(notification_types)
-    await db_session.commit()
+    db_session.commit()
     logger.info(f"Seeded {len(notification_types)} notification types")

@@ -1,6 +1,6 @@
 import uuid
 from datetime import date
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
 
 from app.db.models import (
@@ -14,15 +14,15 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-async def seed_program_requirements(db_session: AsyncSession):
-    """Seed program requirements data - clear existing and add new"""
+def seed_program_requirements(db_session: Session):
+    """Sync version: Seed program requirements data - clear existing and add new"""
 
     # Clear existing program requirements
-    await db_session.execute(delete(ProgramRequirement))
+    db_session.execute(delete(ProgramRequirement))
 
     # Get Bc.CS program
     program_stmt = select(Program).where(Program.program_code == "Bc.CS")
-    program_result = await db_session.execute(program_stmt)
+    program_result = db_session.execute(program_stmt)
     bccs_program = program_result.scalar_one_or_none()
 
     if not bccs_program:
@@ -33,7 +33,7 @@ async def seed_program_requirements(db_session: AsyncSession):
     cert_type_stmt = select(CertificateType).where(
         CertificateType.cert_code == "citi_program_certificate"
     )
-    cert_type_result = await db_session.execute(cert_type_stmt)
+    cert_type_result = db_session.execute(cert_type_stmt)
     citi_cert_type = cert_type_result.scalar_one_or_none()
 
     if not citi_cert_type:
@@ -45,7 +45,7 @@ async def seed_program_requirements(db_session: AsyncSession):
     # Add program requirements
     program_requirements = [
         ProgramRequirement(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             program_id=bccs_program.id,
             cert_type_id=citi_cert_type.id,
             name="CITI Responsible Conduct of Research",
@@ -69,5 +69,5 @@ async def seed_program_requirements(db_session: AsyncSession):
     ]
 
     db_session.add_all(program_requirements)
-    await db_session.commit()
+    db_session.commit()
     logger.info(f"Seeded {len(program_requirements)} program requirements")

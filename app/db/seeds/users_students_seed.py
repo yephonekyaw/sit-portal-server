@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
 
 from app.db.models import (
@@ -15,16 +15,16 @@ from app.utils.logging import get_logger
 logger = get_logger()
 
 
-async def seed_users_students(db_session: AsyncSession):
-    """Seed users and students data - clear existing and add new"""
+def seed_users_students(db_session: Session):
+    """Sync version: Seed users and students data - clear existing and add new"""
 
     # Clear existing students and users
-    await db_session.execute(delete(Student))
-    await db_session.execute(delete(User))
-    await db_session.commit()
+    db_session.execute(delete(Student))
+    db_session.execute(delete(User))
+    db_session.commit()
 
     # Get required references
-    program_result = await db_session.execute(
+    program_result = db_session.execute(
         select(Program).where(Program.program_code == "Bc.CS")
     )
     program = program_result.scalar_one_or_none()
@@ -32,7 +32,7 @@ async def seed_users_students(db_session: AsyncSession):
         logger.error("Program Bc.CS not found")
         return
 
-    academic_year_result = await db_session.execute(
+    academic_year_result = db_session.execute(
         select(AcademicYear).where(AcademicYear.year_code == 2023)
     )
     academic_year = academic_year_result.scalar_one_or_none()
@@ -40,7 +40,6 @@ async def seed_users_students(db_session: AsyncSession):
         logger.error("Academic year 2023 not found")
         return
 
-    # Student data
     students_data = [
         ("66130500801", "66130500801@ad.sit.kmutt.ac.th", "Akari Kyaw", "Thein"),
         ("66130500802", "66130500802@ad.sit.kmutt.ac.th", "Ant Bone", "Kyaw"),
@@ -119,7 +118,7 @@ async def seed_users_students(db_session: AsyncSession):
     # Create users and students
     for student_id, email, first_name, last_name in students_data:
         # Create user
-        user_id = uuid.uuid4()
+        user_id = str(uuid.uuid4())
         user = User(
             id=user_id,
             username=student_id,
@@ -133,7 +132,7 @@ async def seed_users_students(db_session: AsyncSession):
 
         # Create student
         student = Student(
-            id=uuid.uuid4(),
+            id=str(uuid.uuid4()),
             user_id=user_id,
             sit_email=email,
             student_id=student_id,
@@ -146,7 +145,7 @@ async def seed_users_students(db_session: AsyncSession):
     # Add to database
     db_session.add_all(users)
     db_session.add_all(students)
-    await db_session.commit()
+    db_session.commit()
     logger.info(
         f"Seeded {len(users)} users and {len(students)} students for 2023 Bc.CS cohort"
     )
