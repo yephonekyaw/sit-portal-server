@@ -54,8 +54,7 @@ async def daily_requirement_notifier_task(self, request_id: str):
         if not db_session:
             raise DatabaseError("Failed to get database session")
 
-        current_datetime = datetime.now(timezone.utc)
-
+        current_datetime = datetime.now()
 
         # Get all requirement schedules that might need notifications
         eligible_schedules = await _get_eligible_requirement_schedules(

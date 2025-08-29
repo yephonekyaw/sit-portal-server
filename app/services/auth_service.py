@@ -1,6 +1,6 @@
 from typing import Optional, Tuple
-from datetime import datetime
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timezone
+from sqlalchemy.orm import Session
 from sqlalchemy import select
 from ldap3 import Server, Connection
 
@@ -13,14 +13,14 @@ from app.config.settings import settings
 class AuthService:
     """Authentication service for handling login, logout, and token management"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     async def authenticate_user(self, username: str, password: str) -> Optional[User]:
         """Authenticate user by username and password via calling to the LDAP server"""
         # Get user by username
         stmt = select(User).where(User.username == username, User.is_active == True)
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
         if not user:
@@ -70,7 +70,7 @@ class AuthService:
         # Store refresh token in database
         user.refresh_token = tokens.refresh_token
         user.last_login = datetime.now()
-        await self.db.commit()
+        self.db.commit()
 
         return tokens, user
 
@@ -87,7 +87,7 @@ class AuthService:
 
         # Get user from database
         stmt = select(User).where(User.id == user_id, User.is_active == True)
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
         if not user or user.refresh_token != refresh_token:
@@ -112,14 +112,14 @@ class AuthService:
         )
 
         # No need to update refresh_token or increment access_token_version
-        await self.db.commit()
+        self.db.commit()
 
         return tokens
 
     async def logout_user(self, user_id: str) -> bool:
         """Logout user by invalidating refresh token and incrementing token version"""
         stmt = select(User).where(User.id == user_id)
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         user = result.scalar_one_or_none()
 
         if not user:
@@ -128,14 +128,14 @@ class AuthService:
         # Clear refresh token and increment access token version
         user.refresh_token = None
         user.access_token_version += 1
-        await self.db.commit()
+        self.db.commit()
 
         return True
 
     async def get_user_by_id(self, user_id: str) -> Optional[User]:
         """Get user by ID"""
         stmt = select(User).where(User.id == user_id, User.is_active == True)
-        result = await self.db.execute(stmt)
+        result = self.db.execute(stmt)
         return result.scalar_one_or_none()
 
     async def verify_token_version(self, user_id: str, token_version: int) -> bool:

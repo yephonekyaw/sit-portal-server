@@ -1,8 +1,9 @@
+import json
 from typing import Dict, Any, Sequence
-import uuid
+from uuid import UUID
 
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
@@ -15,7 +16,7 @@ from app.db.models import (
     AcademicYear,
     VerificationHistory,
 )
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.schemas.staff.certificate_submission_schemas import (
     CertificateSubmissionResponse,
     CertificateSubmissionsListResponse,
@@ -36,7 +37,7 @@ logger = get_logger()
 class SubmissionServiceProvider:
     """Service provider for submission-related business logic and database operations"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     async def get_certificate_submissions_by_year(
@@ -55,7 +56,7 @@ class SubmissionServiceProvider:
             raise RuntimeError(f"CERTIFICATE_SUBMISSIONS_RETRIEVAL_FAILED: {str(e)}")
 
     async def get_verification_history_by_submission_id(
-        self, submission_id: uuid.UUID
+        self, submission_id: str
     ) -> VerificationHistoryListResponse:
         """Get verification history for a specific certificate submission"""
         try:
@@ -87,7 +88,7 @@ class SubmissionServiceProvider:
 
     async def create_verification_history(
         self,
-        submission_id: uuid.UUID,
+        submission_id: str,
         verification_data: CreateVerificationHistoryRequest,
     ) -> VerificationHistoryResponse:
         """Create a new verification history record for a certificate submission"""
@@ -140,7 +141,7 @@ class SubmissionServiceProvider:
             .order_by(CertificateSubmission.submitted_at.desc())
         )
 
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         submissions = result.scalars().all()
 
         submission_responses = [
@@ -202,7 +203,7 @@ class SubmissionServiceProvider:
             .where(AcademicYear.year_code == year_code)
         )
 
-        result = await self.db.execute(schedule_query)
+        result = self.db.execute(schedule_query)
         return result.scalars().all()
 
     async def _fetch_students_for_schedule(
@@ -216,11 +217,11 @@ class SubmissionServiceProvider:
             .where(Student.academic_year_id == schedule.academic_year_id)
         )
 
-        result = await self.db.execute(students_query)
+        result = self.db.execute(students_query)
         return result.scalars().all()
 
     async def _has_student_submitted_for_schedule(
-        self, student_id: uuid.UUID, schedule: ProgramRequirementSchedule
+        self, student_id: str, schedule: ProgramRequirementSchedule
     ) -> bool:
         """Check if student has already submitted for a schedule"""
         existing_submission_query = select(CertificateSubmission).where(
@@ -232,18 +233,22 @@ class SubmissionServiceProvider:
             )
         )
 
-        result = await self.db.execute(existing_submission_query)
+        result = self.db.execute(existing_submission_query)
         return result.scalar_one_or_none() is not None
 
     async def _validate_submission_exists(
-        self, submission_id: uuid.UUID
+        self, submission_id: str
     ) -> CertificateSubmission:
         """Validate that a submission exists"""
+        try:
+            submission_uuid = UUID(submission_id)
+        except ValueError:
+            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
 
         submission = (
-            await self.db.execute(
+            self.db.execute(
                 select(CertificateSubmission).where(
-                    CertificateSubmission.id == submission_id
+                    CertificateSubmission.id == submission_uuid
                 )
             )
         ).scalar_one_or_none()
@@ -254,16 +259,21 @@ class SubmissionServiceProvider:
         return submission
 
     async def _fetch_verification_history(
-        self, submission_id: uuid.UUID
+        self, submission_id: str
     ) -> Sequence[VerificationHistory]:
         """Fetch verification history for a submission"""
+        try:
+            submission_uuid = UUID(submission_id)
+        except ValueError:
+            return []
+
         history_query = (
             select(VerificationHistory)
-            .where(VerificationHistory.submission_id == submission_id)
+            .where(VerificationHistory.submission_id == submission_uuid)
             .order_by(VerificationHistory.created_at.desc())
         )
 
-        history_result = await self.db.execute(history_query)
+        history_result = self.db.execute(history_query)
         return history_result.scalars().all()
 
     def _validate_status_change(self, old_status, new_status):
@@ -273,12 +283,13 @@ class SubmissionServiceProvider:
 
     async def _create_and_persist_verification_history(
         self,
-        submission_id: uuid.UUID,
+        submission_id: str,
         verification_data: CreateVerificationHistoryRequest,
     ) -> VerificationHistory:
         """Create and persist verification history record"""
+        submission_uuid = UUID(submission_id)
         new_verification = VerificationHistory(
-            submission_id=submission_id,
+            submission_id=submission_uuid,
             verifier_id=verification_data.verifier_id,
             verification_type=verification_data.verification_type,
             old_status=verification_data.old_status,
@@ -289,8 +300,8 @@ class SubmissionServiceProvider:
         )
 
         self.db.add(new_verification)
-        await self.db.flush()  # Flush to get the ID
-        await self.db.refresh(new_verification)  # Refresh to get all fields
+        self.db.flush()  # Flush to get the ID
+        self.db.refresh(new_verification)  # Refresh to get all fields
 
         return new_verification
 
@@ -300,7 +311,7 @@ class SubmissionServiceProvider:
         """Transform submission ORM object to response schema"""
         return CertificateSubmissionResponse(
             # Certificate submission fields
-            id=submission.id,
+            id=str(submission.id),
             file_object_name=submission.file_object_name,
             filename=submission.filename,
             file_size=submission.file_size,
@@ -344,13 +355,15 @@ class SubmissionServiceProvider:
     ) -> VerificationHistoryResponse:
         """Transform verification history ORM object to response schema"""
         return VerificationHistoryResponse(
-            id=record.id,
+            id=str(record.id),
             verification_type=record.verification_type,
             old_status=record.old_status,
             new_status=record.new_status,
             comments=record.comments,
             reasons=record.reasons,
-            agent_analysis_result=record.agent_analysis_result,
+            agent_analysis_result=json.loads(
+                record.agent_analysis_result if record.agent_analysis_result else "{}"
+            ),
             created_at=record.created_at,
             updated_at=record.updated_at,
         )
@@ -402,7 +415,7 @@ class SubmissionServiceProvider:
 
 
 def get_submission_service(
-    db_session: AsyncSession = Depends(get_async_session),
+    db_session: Session = Depends(get_sync_session),
 ) -> SubmissionServiceProvider:
     """Dependency function to get SubmissionServiceProvider instance"""
     return SubmissionServiceProvider(db_session)

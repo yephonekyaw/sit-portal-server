@@ -6,7 +6,7 @@ from typing import cast
 
 from app.utils.auth import AuthUtils
 from app.services.auth_service import AuthService
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.utils.errors import AuthenticationError, AuthorizationError
 from app.utils.responses import ResponseBuilder
 from app.utils.logging import get_logger
@@ -165,7 +165,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return None
 
         # Verify token version with database
-        async for session in get_async_session():
+        for session in get_sync_session():
             auth_service = AuthService(session)
             is_valid = await auth_service.verify_token_version(
                 str(user_id), token_version
@@ -189,7 +189,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
         try:
             # Use auth service to refresh tokens
-            async for session in get_async_session():
+            for session in get_sync_session():
                 auth_service = AuthService(session)
                 new_tokens = await auth_service.refresh_tokens(refresh_token)
                 return new_tokens

@@ -1,9 +1,9 @@
 from fastapi import Depends
 from sqlalchemy import select, and_, func
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.db.models import Student, Program, AcademicYear, EnrollmentStatus
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.utils.logging import get_logger
 
 logger = get_logger()
@@ -12,7 +12,7 @@ logger = get_logger()
 class StudentService:
     """Service provider for student-related operations."""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     async def get_active_student_count_by_program_and_year(
@@ -28,7 +28,7 @@ class StudentService:
         Returns:
             Number of active students matching the criteria
         """
-        result = await self.db.execute(
+        result = self.db.execute(
             select(func.count(Student.id))
             .join(Program, Student.program_id == Program.id)
             .join(AcademicYear, Student.academic_year_id == AcademicYear.id)
@@ -43,12 +43,14 @@ class StudentService:
 
         count = result.scalar_one()
 
-        logger.info(f"Retrieved active student count: {count} for program {program_code} year {academic_year_code}")
+        logger.info(
+            f"Retrieved active student count: {count} for program {program_code} year {academic_year_code}"
+        )
 
         return count
 
 
 def get_student_service(
-    db: AsyncSession = Depends(get_async_session),
+    db: Session = Depends(get_sync_session),
 ) -> StudentService:
     return StudentService(db)

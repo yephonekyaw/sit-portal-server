@@ -43,7 +43,7 @@ async def annual_requirement_archiver_task(self, request_id: str):
         if not db_session:
             raise DatabaseError("Failed to get database session")
 
-        current_datetime = datetime.now(timezone.utc)
+        current_datetime = datetime.now()
         current_academic_year = _calculate_current_academic_year(current_datetime)
 
         logger.info(

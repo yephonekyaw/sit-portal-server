@@ -89,7 +89,7 @@ async def process_notification_task(self, request_id: str, notification_id: str)
                 # For now, in-app notifications are immediately marked as delivered
                 # since they're just stored in the database
                 recipient.status = NotificationStatus.DELIVERED
-                recipient.delivered_at = datetime.now(timezone.utc)
+                recipient.delivered_at = datetime.now()
                 tasks_created += 1
 
             if recipient.line_app_enabled:
@@ -107,7 +107,6 @@ async def process_notification_task(self, request_id: str, notification_id: str)
 
         await db_session.commit()
 
-
         return {
             "success": True,
             "tasks_created": tasks_created,
@@ -116,7 +115,9 @@ async def process_notification_task(self, request_id: str, notification_id: str)
         }
 
     except Exception as e:
-        logger.error(f"Notification processing task exception for {notification_id}: {str(e)}")
+        logger.error(
+            f"Notification processing task exception for {notification_id}: {str(e)}"
+        )
 
         if db_session:
             await db_session.rollback()

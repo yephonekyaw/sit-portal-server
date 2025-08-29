@@ -32,7 +32,7 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
    ### Field Matching Requirements
    - All **critical fields** must match **exactly** between File 1 and File 2
    - All **critical fields** must be **present** in both File 1 and File 2
-   - **Student name** must match exactly (case-sensitive)
+   - **Student name** must be identical in both certificates and match the **Name** field from **STUDENT INFORMATION** section 
    - **Record ID** must be identical in both certificates
    - **Completion date** must match exactly
    - **Course information** must be consistent across both files

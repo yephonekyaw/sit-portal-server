@@ -212,7 +212,7 @@ class UserNotificationService:
 
             # Mark as read if not already read
             if recipient.read_at is None:
-                recipient.read_at = datetime.now(timezone.utc)
+                recipient.read_at = datetime.now()
                 recipient.status = NotificationStatus.READ
                 await self.db.commit()
 
@@ -244,9 +244,7 @@ class UserNotificationService:
                         NotificationRecipient.read_at.is_(None),
                     )
                 )
-                .values(
-                    read_at=datetime.now(timezone.utc), status=NotificationStatus.READ
-                )
+                .values(read_at=datetime.now(), status=NotificationStatus.READ)
                 .execution_options(synchronize_session=False)
             )
 
@@ -299,9 +297,7 @@ class UserNotificationService:
             await self.db.commit()
             updated_count = result.rowcount
 
-            logger.info(
-                f"Cleared {updated_count} notifications for user {user_id}"
-            )
+            logger.info(f"Cleared {updated_count} notifications for user {user_id}")
             return updated_count
 
         except Exception as e:

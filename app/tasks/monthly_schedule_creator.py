@@ -55,10 +55,12 @@ async def monthly_schedule_creator_task(self, request_id: str):
         if not db_session:
             raise DatabaseError("Failed to get database session")
 
-        current_datetime = datetime.now(timezone.utc)
+        current_datetime = datetime.now()
         current_academic_year = _calculate_current_academic_year(current_datetime)
 
-        logger.info(f"Starting monthly schedule creation task for academic year {current_academic_year}")
+        logger.info(
+            f"Starting monthly schedule creation task for academic year {current_academic_year}"
+        )
 
         # Get all active program requirements with related data
         program_requirements = await _get_active_program_requirements(db_session)
@@ -166,7 +168,9 @@ async def monthly_schedule_creator_task(self, request_id: str):
                 schedules_to_create.append(schedule_data)
 
             except Exception as e:
-                logger.error(f"Error processing requirement {requirement.id if requirement else None}: {str(e)}")
+                logger.error(
+                    f"Error processing requirement {requirement.id if requirement else None}: {str(e)}"
+                )
                 continue
 
         # Create all schedules in batch
@@ -196,7 +200,7 @@ async def monthly_schedule_creator_task(self, request_id: str):
                 )
 
                 if academic_year_result:
-                    await dashboard_service.create_dashboard_stats_for_schedule_data(
+                    await dashboard_service.create_dashboard_stats_for_schedule(
                         schedule_data=schedule_data,
                         program_code=requirement.program.program_code,
                         academic_year_code=academic_year_result.year_code,
@@ -220,7 +224,9 @@ async def monthly_schedule_creator_task(self, request_id: str):
                 )
 
                 if academic_year_result is None:
-                    logger.error(f"Academic year not found for schedule {schedule_data['academic_year_id']} requirement {req_id}")
+                    logger.error(
+                        f"Academic year not found for schedule {schedule_data['academic_year_id']} requirement {req_id}"
+                    )
                     continue
 
                 student_cohort_year = academic_year_result.year_code
@@ -231,7 +237,9 @@ async def monthly_schedule_creator_task(self, request_id: str):
                 db_session, processed_requirements_data
             )
 
-        logger.info(f"Monthly schedule creation task completed: processed {processed_count}, created {created_count}, skipped {skipped_count}")
+        logger.info(
+            f"Monthly schedule creation task completed: processed {processed_count}, created {created_count}, skipped {skipped_count}"
+        )
 
         return {
             "success": True,

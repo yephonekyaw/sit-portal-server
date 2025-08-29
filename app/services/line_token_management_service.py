@@ -32,7 +32,7 @@ class LineChannelTokenService:
         if not self.key_file.exists():
             raise LineApplicationError(
                 f"Signing key file not found: {self.key_file}",
-                error_code="LINE_KEY_FILE_NOT_FOUND"
+                error_code="LINE_KEY_FILE_NOT_FOUND",
             )
 
         with open(self.key_file, "r") as f:
@@ -41,7 +41,7 @@ class LineChannelTokenService:
         if "private_key" not in keys:
             raise LineApplicationError(
                 "Invalid key file: missing private_key",
-                error_code="LINE_INVALID_KEY_FILE"
+                error_code="LINE_INVALID_KEY_FILE",
             )
 
         return keys
@@ -51,7 +51,7 @@ class LineChannelTokenService:
         if not all([settings.LINE_CHANNEL_ID, settings.LINE_KID]):
             raise LineApplicationError(
                 "LINE_CHANNEL_ID and LINE_KID must be configured",
-                error_code="LINE_CONFIG_MISSING"
+                error_code="LINE_CONFIG_MISSING",
             )
 
         keys = self._load_signing_keys()
@@ -98,7 +98,7 @@ class LineChannelTokenService:
             if response.status_code != 200:
                 raise LineApplicationError(
                     f"Failed to issue access token: {response.status_code} - {response.text}",
-                    error_code="LINE_TOKEN_ISSUE_FAILED"
+                    error_code="LINE_TOKEN_ISSUE_FAILED",
                 )
 
             return response.json()
@@ -124,7 +124,7 @@ class LineChannelTokenService:
             if response.status_code != 200:
                 raise LineApplicationError(
                     f"Failed to get token kids: {response.status_code} - {response.text}",
-                    error_code="LINE_TOKEN_KIDS_FAILED"
+                    error_code="LINE_TOKEN_KIDS_FAILED",
                 )
 
             return response.json().get("kids", [])
@@ -134,7 +134,7 @@ class LineChannelTokenService:
         if not settings.LINE_CHANNEL_SECRET:
             raise LineApplicationError(
                 "LINE_CHANNEL_SECRET must be configured",
-                error_code="LINE_CONFIG_MISSING"
+                error_code="LINE_CONFIG_MISSING",
             )
 
         data = {
@@ -156,9 +156,7 @@ class LineChannelTokenService:
         self, token_data: Dict[str, str]
     ) -> LineChannelAccessToken:
         """Store a new access token in the database."""
-        expires_at = datetime.now(timezone.utc) + timedelta(
-            seconds=int(token_data["expires_in"])
-        )
+        expires_at = datetime.now() + timedelta(seconds=int(token_data["expires_in"]))
 
         # Deactivate all existing tokens first
         await self.db.execute(
@@ -191,7 +189,7 @@ class LineChannelTokenService:
                 and_(
                     LineChannelAccessToken.is_active == True,
                     LineChannelAccessToken.is_revoked == False,
-                    LineChannelAccessToken.expires_at > datetime.now(timezone.utc),
+                    LineChannelAccessToken.expires_at > datetime.now(),
                 )
             )
             .order_by(LineChannelAccessToken.expires_at.desc())
@@ -207,7 +205,7 @@ class LineChannelTokenService:
             select(LineChannelAccessToken).where(
                 and_(
                     LineChannelAccessToken.key_id.in_(valid_kids),
-                    LineChannelAccessToken.expires_at <= datetime.now(timezone.utc),
+                    LineChannelAccessToken.expires_at <= datetime.now(),
                     LineChannelAccessToken.is_revoked == False,
                 )
             )
@@ -222,7 +220,7 @@ class LineChannelTokenService:
             .values(
                 is_revoked=True,
                 is_active=False,
-                revoked_at=datetime.now(timezone.utc),
+                revoked_at=datetime.now(),
             )
         )
         await self.db.commit()
@@ -239,7 +237,7 @@ class LineChannelTokenService:
 
     async def cleanup_expired_tokens(self) -> int:
         """Remove expired and revoked tokens that are safe to clean up."""
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=7)
+        cutoff_date = datetime.now() - timedelta(days=7)
 
         result = await self.db.execute(
             select(LineChannelAccessToken).where(

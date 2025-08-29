@@ -1,9 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime
 from uuid import UUID
 from typing import List
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy.orm import selectinload
 
 from app.db.models import (
@@ -30,16 +30,14 @@ logger = get_logger()
 class RequirementsService:
     """Service for managing student certificate requirements and submissions"""
 
-    def __init__(self, db_session: AsyncSession, minio_service: MinIOService):
+    def __init__(self, db_session: Session, minio_service: MinIOService):
         self.db = db_session
         self.minio = minio_service
 
     async def get_student_by_user_id(self, user_id: str) -> Student:
         """Get student record by user ID with validation"""
         student = (
-            await self.db.execute(
-                select(Student).where(Student.user_id == UUID(user_id))
-            )
+            self.db.execute(select(Student).where(Student.user_id == UUID(user_id)))
         ).scalar_one_or_none()
 
         if not student:
@@ -76,7 +74,7 @@ class RequirementsService:
             )
         )
 
-        schedules_result = await self.db.execute(schedules_stmt)
+        schedules_result = self.db.execute(schedules_stmt)
         schedules = schedules_result.scalars().all()
 
         # Build response data
@@ -158,7 +156,7 @@ class RequirementsService:
             raise BusinessLogicError("Invalid request data format")
 
         # Validate certificate type exists
-        cert_type = await self.db.get(CertificateType, cert_type_uuid)
+        cert_type = self.db.get(CertificateType, cert_type_uuid)
         if not cert_type:
             raise BusinessLogicError("Certificate type not found")
 
@@ -175,7 +173,7 @@ class RequirementsService:
                 ).selectinload(ProgramRequirement.certificate_type),
             )
         )
-        schedule_result = await self.db.execute(schedule_stmt)
+        schedule_result = self.db.execute(schedule_stmt)
         schedule = schedule_result.scalar_one_or_none()
         if not schedule:
             raise BusinessLogicError("Program requirement schedule not found")
@@ -192,10 +190,15 @@ class RequirementsService:
         existing_submission = None
 
         if is_edit:
+            try:
+                submission_edit_uuid = UUID(submission_data.submission_id)
+            except ValueError:
+                raise BusinessLogicError("Invalid submission ID format")
+
             existing_submission = (
-                await self.db.execute(
+                self.db.execute(
                     select(CertificateSubmission).where(
-                        CertificateSubmission.id == submission_data.submission_id,
+                        CertificateSubmission.id == submission_edit_uuid,
                         CertificateSubmission.student_id == student.id,
                         CertificateSubmission.requirement_schedule_id == schedule.id,
                     )
@@ -212,7 +215,7 @@ class RequirementsService:
                 raise BusinessLogicError("Approved submission cannot be edited")
         else:
             existing_submission = (
-                await self.db.execute(
+                self.db.execute(
                     select(CertificateSubmission).where(
                         CertificateSubmission.student_id == student.id,
                         CertificateSubmission.requirement_schedule_id == schedule.id,
@@ -271,15 +274,15 @@ class RequirementsService:
 
             existing_submission.submission_status = SubmissionStatus.PENDING
             existing_submission.agent_confidence_score = 0.0
-            existing_submission.submitted_at = datetime.now(timezone.utc)
+            existing_submission.submitted_at = datetime.now()
 
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now()
             if current_time <= schedule.submission_deadline:
                 existing_submission.submission_timing = SubmissionTiming.ON_TIME
             else:
                 existing_submission.submission_timing = SubmissionTiming.LATE
 
-            await self.db.commit()
+            self.db.commit()
 
             try:
                 await self.minio.delete_file(old_file_object_name)
@@ -289,7 +292,7 @@ class RequirementsService:
             # Build and return complete response
             return self._build_submission_response(existing_submission, schedule)
         else:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now()
             if current_time <= schedule.submission_deadline:
                 timing = SubmissionTiming.ON_TIME
             else:
@@ -308,7 +311,7 @@ class RequirementsService:
             )
 
             self.db.add(submission)
-            await self.db.commit()
+            self.db.commit()
 
             # Build and return complete response
             return self._build_submission_response(submission, schedule)
@@ -358,13 +361,18 @@ class RequirementsService:
         )
 
     async def validate_submission_ownership(
-        self, submission_id: UUID, student_id: UUID
+        self, submission_id: str, student_id: str
     ) -> None:
         """Validate that a submission belongs to the specified student"""
+        try:
+            submission_uuid = UUID(submission_id)
+        except ValueError:
+            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
+
         submission = (
-            await self.db.execute(
+            self.db.execute(
                 select(CertificateSubmission).where(
-                    CertificateSubmission.id == submission_id
+                    CertificateSubmission.id == submission_uuid
                 )
             )
         ).scalar_one_or_none()

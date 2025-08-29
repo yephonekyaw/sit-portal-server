@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
 
@@ -43,7 +43,7 @@ def seed_staff_permissions(db_session: Session):
             permission_id=permission.id,
             is_active=True,
             assigned_by=None,  # System assigned
-            assigned_at=datetime.now(),  # Simplified for MSSQL
+            assigned_at=datetime.now(),
             expires_at=None,  # Never expires
         )
         staff_permissions.append(staff_permission)

@@ -34,7 +34,7 @@ async def daily_scheduled_notifications_processor_task(self, request_id: str):
             raise DatabaseError("Failed to get database session")
 
         # Get current date in UTC
-        current_date = datetime.now(timezone.utc).date()
+        current_date = datetime.now().date()
 
         # Query notifications scheduled for today that have pending recipients
         result = await db_session.execute(
@@ -57,7 +57,7 @@ async def daily_scheduled_notifications_processor_task(self, request_id: str):
                     # Not expired
                     (
                         Notification.expires_at.is_(None)
-                        | (Notification.expires_at > datetime.now(timezone.utc))
+                        | (Notification.expires_at > datetime.now())
                     ),
                 )
             )

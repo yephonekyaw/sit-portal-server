@@ -1,8 +1,7 @@
 import asyncio
-import sys
 
 from app.celery import celery
-from app.db.session import AsyncSessionLocal
+from app.db.session import get_sync_session
 from app.services.citi_automation_service import get_citi_automation_service
 from app.utils.logging import get_logger
 
@@ -13,51 +12,35 @@ logger = get_logger()
 def verify_certificate_task(self, request_id: str, submission_id: str):
     """
     Celery task to verify a certificate submission.
-    """
-    if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
-    try:
-        result = asyncio.run(_async_verify_certificate(request_id, submission_id))
-        return result
-    except Exception as e:
-        logger.error(
-            f"Certificate verification task failed for {submission_id}: {str(e)}",
-            request_id=request_id,
-        )
-        return {
-            "success": False,
-            "error": str(e),
-            "submission_id": submission_id,
-            "request_id": request_id,
-        }
+    Args:
+        request_id: The request ID from the original HTTP request
+        submission_id: UUID of the certificate submission to verify
+    """
+    return asyncio.run(_async_verify_certificate(request_id, submission_id))
 
 
 async def _async_verify_certificate(request_id: str, submission_id: str):
+
     logger = get_logger().bind(request_id=request_id)
 
-    async with AsyncSessionLocal() as session:
+    for db_session in get_sync_session():
         try:
+            # Use the refactored service for verification
             citi_service = get_citi_automation_service()
 
             result = await citi_service.verify_certificate_submission(
-                db_session=session,
+                db_session=db_session,
                 request_id=request_id,
                 submission_id=submission_id,
             )
 
-            if result["success"]:
-                await session.commit()
-            else:
-                await session.rollback()
+            if not result["success"]:
                 logger.error(
                     f"Certificate verification task failed for {submission_id}: {result.get('error')}"
                 )
-
             return result
-
         except Exception as e:
-            await session.rollback()
             logger.error(
                 f"Certificate verification task exception for {submission_id}: {str(e)}"
             )
@@ -67,5 +50,3 @@ async def _async_verify_certificate(request_id: str, submission_id: str):
                 "submission_id": submission_id,
                 "request_id": request_id,
             }
-        finally:
-            await session.close_all()

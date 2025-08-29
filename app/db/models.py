@@ -919,6 +919,7 @@ class DashboardStats(Base, AuditMixin):
     total_submissions_required: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
+    # submitted_count includes approved_count, rejected_count, pending_count, and manual_review_count
     submitted_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     approved_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     rejected_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

@@ -4,7 +4,7 @@ from uuid import UUID
 from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.utils.logging import get_logger
 from app.config.settings import settings
@@ -133,11 +133,11 @@ class CitiProgramAutomationService:
         return extraction_result
 
     async def _get_submission_data(
-        self, db_session: AsyncSession, submission_id: str
+        self, db_session: Session, submission_id: str
     ) -> Optional[Dict[str, Any]]:
         """Retrieve certificate submission with related data."""
         try:
-            result = await db_session.execute(
+            result = db_session.execute(
                 select(CertificateSubmission, CertificateType, Student, User)
                 .join(
                     CertificateType,
@@ -244,7 +244,7 @@ class CitiProgramAutomationService:
 
     async def _save_verification_results(
         self,
-        db_session: AsyncSession,
+        db_session: Session,
         submission: CertificateSubmission,
         llm_response: CitiValidationResponse,
     ) -> bool:
@@ -269,11 +269,11 @@ class CitiProgramAutomationService:
                 new_status=new_status,
                 comments=comments,
                 reasons=reasons,
-                agent_analysis_result=llm_response.model_dump(),
+                agent_analysis_result=llm_response.model_dump_json(indent=2),
             )
 
             db_session.add(verification_history)
-            await db_session.commit()
+            db_session.commit()
 
             logger.info(
                 f"Verification saved: {submission.id} - {old_status.value} → {new_status.value}"
@@ -282,11 +282,10 @@ class CitiProgramAutomationService:
 
         except Exception as e:
             logger.error(f"Failed to save verification: {submission.id} - {e}")
-            await db_session.rollback()
             return False
 
     async def verify_certificate_submission(
-        self, db_session: AsyncSession, request_id: str, submission_id: str
+        self, db_session: Session, request_id: str, submission_id: str
     ) -> Dict[str, Any]:
         """Main method to verify certificate submission end-to-end."""
         logger.info(f"Starting verification workflow: {submission_id}")

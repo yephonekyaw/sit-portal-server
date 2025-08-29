@@ -106,7 +106,7 @@ async def create_notification_task(
         if notification_id:
 
             # If notification is scheduled for future, don't process immediately
-            if scheduled_for_dt and scheduled_for_dt > datetime.now(timezone.utc):
+            if scheduled_for_dt and scheduled_for_dt > datetime.now():
                 pass
             else:
                 # Trigger immediate processing for non-scheduled notifications
@@ -124,7 +124,9 @@ async def create_notification_task(
                 "request_id": request_id,
             }
         else:
-            logger.error(f"Failed to create notification {notification_code} for entity {entity_id}")
+            logger.error(
+                f"Failed to create notification {notification_code} for entity {entity_id}"
+            )
             return {
                 "success": False,
                 "error": "Failed to create notification",
@@ -132,7 +134,9 @@ async def create_notification_task(
             }
 
     except Exception as e:
-        logger.error(f"Notification creation task exception {notification_code}/{entity_id}: {str(e)}")
+        logger.error(
+            f"Notification creation task exception {notification_code}/{entity_id}: {str(e)}"
+        )
 
         if db_session:
             await db_session.rollback()

@@ -1,8 +1,8 @@
 from typing import Annotated
-from fastapi import APIRouter, Depends, Request, Response
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy.orm import Session
 
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.services.auth_service import AuthService
 from app.schemas.auth_schemas import (
     LoginRequest,
@@ -21,7 +21,7 @@ auth_router = APIRouter()
 async def login(
     login_request: LoginRequest,
     request: Request,
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """
     Login user with username and password.
@@ -66,7 +66,7 @@ async def login(
 async def logout(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """Logout user and invalidate all sessions"""
     auth_service = AuthService(db)
@@ -86,7 +86,7 @@ async def logout(
 async def get_current_user_info(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """Get current authenticated user information"""
     auth_service = AuthService(db)

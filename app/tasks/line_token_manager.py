@@ -42,10 +42,7 @@ async def line_token_manager_task(self, request_id: str) -> Dict[str, Any]:
 
         # Generate new token if needed
         current_token = await line_service.get_active_access_token()
-        if (
-            not current_token
-            or (current_token.expires_at - datetime.now(timezone.utc)).days <= 7
-        ):
+        if not current_token or (current_token.expires_at - datetime.now()).days <= 7:
             new_token = await line_service.generate_and_store_new_token()
             if new_token:
                 stats["new_tokens_generated"] = 1

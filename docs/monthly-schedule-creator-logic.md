@@ -48,7 +48,7 @@ The system distinguishes between when students started (cohort year) and when th
 
 ### 1. Initialization
 ```python
-current_datetime = datetime.now(timezone.utc)
+current_datetime = datetime.now()
 current_academic_year = _calculate_current_academic_year(current_datetime)
 ```
 

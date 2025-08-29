@@ -34,9 +34,9 @@ async def daily_notification_expiration_task(self, request_id: str):
             raise DatabaseError("Failed to get database session")
 
         # Get current date in UTC
-        current_date = datetime.now(timezone.utc).date()
-        current_datetime = datetime.now(timezone.utc)
-        
+        current_date = datetime.now().date()
+        current_datetime = datetime.now()
+
         # Query notifications that expire today and have pending recipients
         notifications_result = await db_session.execute(
             select(Notification)
@@ -45,7 +45,7 @@ async def daily_notification_expiration_task(self, request_id: str):
                 and_(
                     # Expires today or earlier
                     Notification.expires_at.is_not(None),
-                    Notification.expires_at <= current_datetime
+                    Notification.expires_at <= current_datetime,
                 )
             )
         )
@@ -64,10 +64,10 @@ async def daily_notification_expiration_task(self, request_id: str):
         # Mark pending recipients as expired for each expiring notification
         total_expired_notifications = 0
         total_expired_recipients = 0
-        
+
         for notification in expiring_notifications:
             expired_recipients_count = 0
-            
+
             # Update pending recipients to expired status
             for recipient in notification.recipients:
                 if recipient.status == NotificationStatus.PENDING:
@@ -77,7 +77,6 @@ async def daily_notification_expiration_task(self, request_id: str):
             if expired_recipients_count > 0:
                 total_expired_notifications += 1
                 total_expired_recipients += expired_recipients_count
-                
 
         # Commit all changes
         await db_session.commit()

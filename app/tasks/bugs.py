@@ -3,7 +3,7 @@ from sqlalchemy import select
 
 from app.celery import celery
 
-from app.db.session import AsyncSessionLocal
+from app.db.session import get_sync_session
 from app.db.models import LineChannelAccessToken
 from app.utils.logging import get_logger
 
@@ -16,9 +16,9 @@ def report_bugs():
 
 
 async def _async_report_bugs():
-    async with AsyncSessionLocal.begin() as session:
+    for session in get_sync_session():
         try:
-            result = await session.execute(select(LineChannelAccessToken))
+            result = session.execute(select(LineChannelAccessToken))
             tokens = result.scalars().all()
             for token in tokens:
                 logger.info(f"Reporting bug for token: {token.key_id}")

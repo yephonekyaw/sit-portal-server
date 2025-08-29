@@ -2,9 +2,9 @@ from typing import List, Annotated
 import uuid
 
 from fastapi import APIRouter, Depends, Request, Form, Path, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.schemas.student.requirement_schemas import (
     StudentRequirementWithSubmissionResponse,
     RequirementSubmissionRequest,
@@ -23,7 +23,6 @@ from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
 from app.tasks.citi_cert_verification_task import verify_certificate_task
 from app.middlewares.auth_middleware import require_student, AuthState
-from app.db.session import AsyncSessionLocal
 
 logger = get_logger()
 requirement_router = APIRouter()
@@ -37,35 +36,35 @@ async def submit_student_certificate(
     ],
     current_user: AuthState = Depends(require_student),
     minio_service: MinIOService = Depends(get_minio_service),
+    db_session: Session = Depends(get_sync_session),
 ):
-    async with AsyncSessionLocal.begin() as db_session:
-        try:
-            requirements_service = RequirementsService(db_session, minio_service)
+    try:
+        requirements_service = RequirementsService(db_session, minio_service)
 
-            # Get student information
-            student = await requirements_service.get_student_by_user_id(
-                current_user.user_id
-            )
+        # Get student information
+        student = await requirements_service.get_student_by_user_id(
+            current_user.user_id
+        )
 
-            # Submit certificate
-            submission_response = await requirements_service.submit_certificate(
-                student=student, submission_data=submission_data
-            )
+        # Submit certificate
+        submission_response = await requirements_service.submit_certificate(
+            student=student, submission_data=submission_data
+        )
 
-            # Call celery verification task
-            verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
+        # Call celery verification task
+        verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
 
-            return ResponseBuilder.success(
-                request=request,
-                data=submission_response.model_dump(by_alias=True),
-                message="Certificate submitted successfully",
-            )
+        return ResponseBuilder.success(
+            request=request,
+            data=submission_response.model_dump(by_alias=True),
+            message="Certificate submitted successfully",
+        )
 
-        except BusinessLogicError:
-            raise
-        except Exception as e:
-            logger.info(f"Certificate submission error: {str(e)}")
-            raise BusinessLogicError("Certificate submission failed")
+    except BusinessLogicError:
+        raise
+    except Exception as e:
+        logger.info(f"Certificate submission error: {str(e)}")
+        raise BusinessLogicError("Certificate submission failed")
 
 
 @requirement_router.get(
@@ -74,7 +73,7 @@ async def submit_student_certificate(
 async def get_student_requirements_with_submissions(
     request: Request,
     current_user: AuthState = Depends(require_student),
-    db_session: AsyncSession = Depends(get_async_session),
+    db_session: Session = Depends(get_sync_session),
     minio_service: MinIOService = Depends(get_minio_service),
 ):
     """
@@ -121,10 +120,10 @@ async def get_student_requirements_with_submissions(
 )
 async def get_student_verification_history_by_submission_id(
     request: Request,
-    submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
+    submission_id: Annotated[str, Path(description="Certificate submission ID")],
     current_user: AuthState = Depends(require_student),
     submission_service: SubmissionServiceProvider = Depends(get_submission_service),
-    db_session: AsyncSession = Depends(get_async_session),
+    db_session: Session = Depends(get_sync_session),
     minio_service: MinIOService = Depends(get_minio_service),
 ):
     """Get verification history for a specific certificate submission that belongs to the current student"""
@@ -141,6 +140,8 @@ async def get_student_verification_history_by_submission_id(
         await requirements_service.validate_submission_ownership(
             submission_id, student.id
         )
+
+        print("Ownership validated")
 
         # Get verification history using submission service
         history_data = (

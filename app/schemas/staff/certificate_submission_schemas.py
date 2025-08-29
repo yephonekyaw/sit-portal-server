@@ -1,7 +1,6 @@
 from datetime import datetime
 from typing import Optional, Dict, Any
 from pydantic import Field
-import uuid
 from app.db.models import SubmissionStatus, SubmissionTiming, VerificationType
 
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
@@ -53,7 +52,7 @@ class CertificateSubmissionResponse(BaseModel):
     """Response schema for certificate submission with related information"""
 
     # Certificate submission fields (excluding foreign keys)
-    id: uuid.UUID = Field(..., description="Certificate submission ID")
+    id: str = Field(..., description="Certificate submission ID")
     file_object_name: str = Field(..., description="File object name in storage")
     filename: str = Field(..., description="Original filename")
     file_size: int = Field(..., description="File size in bytes")
@@ -127,7 +126,7 @@ class CertificateSubmissionsListResponse(BaseModel):
 class VerificationHistoryResponse(BaseModel):
     """Response schema for verification history"""
 
-    id: uuid.UUID = Field(..., description="Verification history ID")
+    id: str = Field(..., description="Verification history ID")
     verification_type: VerificationType = Field(
         ..., description="Type of verification (manual/agent)"
     )
@@ -151,7 +150,7 @@ class VerificationHistoryListResponse(BaseModel):
     total_count: int = Field(
         ..., description="Total number of verification history records"
     )
-    submission_id: uuid.UUID = Field(..., description="Certificate submission ID")
+    submission_id: str = Field(..., description="Certificate submission ID")
 
 
 class CreateVerificationHistoryRequest(BaseModel):
@@ -168,7 +167,7 @@ class CreateVerificationHistoryRequest(BaseModel):
     reasons: Optional[str] = Field(
         None, description="Verification reasons", max_length=1000
     )
-    verifier_id: Optional[uuid.UUID] = Field(
+    verifier_id: Optional[str] = Field(
         None, description="ID of the staff member who performed verification"
     )
     agent_analysis_result: Optional[Dict[str, Any]] = Field(
