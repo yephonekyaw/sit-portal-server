@@ -1,9 +1,11 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 import uuid
 
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
-class CertificateTypeResponse(BaseModel):
+
+class GetCertificatesItem(BaseModel):
     """Response schema for certificate type with counts"""
 
     id: uuid.UUID = Field(..., description="Certificate type ID")
@@ -28,9 +30,10 @@ class CertificateTypeResponse(BaseModel):
     )
 
 
-class UpdateCertificateTypeRequest(BaseModel):
+class UpdateCertificateRequest(BaseModel):
     """Request schema for updating a certificate type"""
 
+    id: uuid.UUID = Field(..., description="Certificate type ID")
     cert_code: str = Field(
         ..., min_length=1, max_length=50, description="Certificate type code"
     )
@@ -43,12 +46,8 @@ class UpdateCertificateTypeRequest(BaseModel):
     verification_template: str = Field(
         ..., min_length=1, description="Verification template"
     )
+    has_expiration: bool = Field(..., description="Whether certificate has expiration")
 
 
-class CertificateTypeArchiveResponse(BaseModel):
+class CertificateResponse(UpdateCertificateRequest):
     """Response schema for certificate type archive operation"""
-
-    certificate: dict = Field(..., description="Archived certificate type data")
-    archived_requirements_count: int = Field(
-        ..., description="Number of requirements archived"
-    )

@@ -20,7 +20,7 @@ from app.schemas.staff.program_schemas import (
 logger = get_logger()
 
 
-class ProgramServiceProvider:
+class ProgramService:
     """Service provider for program-related business logic and database operations"""
 
     def __init__(self, db_session: Session):
@@ -69,11 +69,9 @@ class ProgramServiceProvider:
             return self._create_program_response(new_program)
 
         except IntegrityError as e:
-            logger.warning(f"Integrity error creating program: {str(e)}")
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
-            logger.error(f"Failed to create program: {str(e)}")
-            raise RuntimeError("PROGRAM_CREATION_FAILED")
+            raise e
 
     async def update_program(
         self, program_id: uuid.UUID, program_data: UpdateProgramRequest
@@ -120,11 +118,9 @@ class ProgramServiceProvider:
             return self._create_program_response(program)
 
         except IntegrityError as e:
-            logger.warning(f"Integrity error updating program: {str(e)}")
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
-            logger.error(f"Failed to update program {program_id}: {str(e)}")
-            raise RuntimeError("PROGRAM_UPDATE_FAILED")
+            raise e
 
     async def archive_program(self, program_id: uuid.UUID) -> Dict[str, Any]:
         """Archive a program only if it has no active requirements"""
@@ -208,8 +204,7 @@ class ProgramServiceProvider:
             return programs_list
 
         except Exception as e:
-            logger.error(f"Failed to retrieve programs: {str(e)}")
-            raise RuntimeError("PROGRAMS_RETRIEVAL_FAILED")
+            raise e
 
     # Helper Methods
     async def _get_conflicting_requirements(
@@ -340,6 +335,6 @@ class ProgramServiceProvider:
 # Dependency injection for service provider
 def get_program_service(
     db: Session = Depends(get_sync_session),
-) -> ProgramServiceProvider:
-    """Dependency to provide ProgramServiceProvider instance"""
-    return ProgramServiceProvider(db)
+) -> ProgramService:
+    """Dependency to provide ProgramService instance"""
+    return ProgramService(db)

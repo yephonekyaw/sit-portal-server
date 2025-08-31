@@ -22,10 +22,8 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
 
    ### Branding & Source Validation
    - The document must display **CITI Program** official branding
-   - It must include the **official address**:  
-     *101 NE 3rd Avenue, Suite 320, Fort Lauderdale, FL 33301 US*
-   - It must include the **official website**:  
-     *www.citiprogram.org*
+   - It must include the **official address**: *101 NE 3rd Avenue, Suite 320, Fort Lauderdale, FL 33301 US*
+   - It must include the **official website**: *www.citiprogram.org*
    - It must contain a **CME disclaimer**: *"Not valid for renewal of certification through CME"*
    - The **verification URL** must follow the required structure described below
 

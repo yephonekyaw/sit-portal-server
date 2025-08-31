@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Request, status, Path
 
 from app.middlewares.auth_middleware import require_staff
 from app.services.staff.program_service import (
-    ProgramServiceProvider,
+    ProgramService,
     get_program_service,
 )
 from app.schemas.staff.program_schemas import (
@@ -87,14 +87,12 @@ def handle_service_error(request: Request, error: Exception):
 async def get_all_programs(
     request: Request,
     query_params: Annotated[ProgramListQueryParams, Depends()],
-    program_service: ProgramServiceProvider = Depends(get_program_service),
+    program_service: ProgramService = Depends(get_program_service),
 ):
     """Get all programs with filtering and sorting capabilities"""
     try:
         programs_list = await program_service.get_all_programs_with_counts(query_params)
-        message = ProgramServiceProvider.build_success_message(
-            len(programs_list), query_params
-        )
+        message = ProgramService.build_success_message(len(programs_list), query_params)
 
         return ResponseBuilder.success(
             request=request,
@@ -122,7 +120,7 @@ async def get_all_programs(
 async def create_program(
     request: Request,
     program_data: CreateProgramRequest,
-    program_service: ProgramServiceProvider = Depends(get_program_service),
+    program_service: ProgramService = Depends(get_program_service),
 ):
     """Create a new academic program"""
     try:
@@ -154,7 +152,7 @@ async def update_program(
     request: Request,
     program_data: UpdateProgramRequest,
     program_id: Annotated[uuid.UUID, Path(description="Program ID to update")],
-    program_service: ProgramServiceProvider = Depends(get_program_service),
+    program_service: ProgramService = Depends(get_program_service),
 ):
     """Update an existing academic program with validation"""
     try:
@@ -187,13 +185,13 @@ async def update_program(
 async def archive_program(
     request: Request,
     program_id: Annotated[uuid.UUID, Path(description="Program ID to archive")],
-    program_service: ProgramServiceProvider = Depends(get_program_service),
+    program_service: ProgramService = Depends(get_program_service),
 ):
     """Archive a program and all its active requirements"""
     try:
         response_data = await program_service.archive_program(program_id)
         archived_count = response_data["archived_requirements_count"]
-        message = ProgramServiceProvider.build_archive_message(archived_count)
+        message = ProgramService.build_archive_message(archived_count)
 
         return ResponseBuilder.success(
             request=request,
