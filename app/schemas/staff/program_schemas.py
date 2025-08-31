@@ -1,7 +1,9 @@
 from typing import Optional, Literal
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import Field
 import uuid
+
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class CreateProgramRequest(BaseModel):
@@ -21,6 +23,7 @@ class CreateProgramRequest(BaseModel):
 class UpdateProgramRequest(BaseModel):
     """Request schema for updating an existing program"""
 
+    id: uuid.UUID = Field(..., description="Program ID")
     program_code: str = Field(
         ..., min_length=1, max_length=20, description="Unique program code"
     )
@@ -42,7 +45,7 @@ class ProgramResponse(BaseModel):
     is_active: bool = Field(..., description="Program active status")
 
 
-class ProgramListItemResponse(BaseModel):
+class GetProgramsItem(BaseModel):
     """Response schema for program list item with requirement counts"""
 
     id: uuid.UUID = Field(..., description="Program ID")
@@ -52,9 +55,7 @@ class ProgramListItemResponse(BaseModel):
     duration_years: int = Field(..., description="Program duration in years")
     is_active: bool = Field(..., description="Program active status")
     created_at: datetime = Field(..., description="Program creation timestamp")
-    updated_at: Optional[datetime] = Field(
-        None, description="Program last update timestamp"
-    )
+    updated_at: datetime = Field(..., description="Program last update timestamp")
     active_requirements_count: int = Field(
         ..., description="Count of active requirements"
     )

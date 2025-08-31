@@ -67,7 +67,7 @@ class BaseNotificationService(ABC):
                     NotificationChannelTemplate.notification_type_id
                     == notification_type.id,
                     NotificationChannelTemplate.channel_type == channel_enum,
-                    NotificationChannelTemplate.is_active.is_(True),
+                    NotificationChannelTemplate.is_active == True,
                 )
             )
             template = template_result.scalar_one_or_none()

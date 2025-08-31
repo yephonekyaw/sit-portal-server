@@ -16,13 +16,13 @@ def seed_staff_permissions(db_session: Session):
     db_session.execute(delete(StaffPermission))
     db_session.commit()
 
-    # Get Julian San's staff record
+    # Get CSCMS staff record
     staff_result = db_session.execute(
-        select(Staff).join(User).where(User.username == "julian.san")
+        select(Staff).join(User).where(User.username == "cscms")
     )
     staff = staff_result.scalar_one_or_none()
     if not staff:
-        logger.error("Staff Julian San not found")
+        logger.error("Staff CSCMS not found")
         return
 
     # Get all permissions
@@ -35,7 +35,7 @@ def seed_staff_permissions(db_session: Session):
 
     staff_permissions = []
 
-    # Assign all permissions to Julian San
+    # Assign all permissions to CSCMS
     for permission in permissions:
         staff_permission = StaffPermission(
             id=str(uuid.uuid4()),
@@ -50,4 +50,4 @@ def seed_staff_permissions(db_session: Session):
 
     db_session.add_all(staff_permissions)
     db_session.commit()
-    logger.info(f"Seeded {len(staff_permissions)} staff permissions for Julian San")
+    logger.info(f"Seeded {len(staff_permissions)} staff permissions for CSCMS")

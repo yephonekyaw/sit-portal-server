@@ -1,19 +1,19 @@
-from typing import Optional, Sequence, List, Dict, Any
+from typing import Optional, Sequence, List, Dict, Any, cast
 import uuid
 
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, func, and_
 
 from app.utils.logging import get_logger
 from app.db.models import Program, ProgramRequirement
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.schemas.staff.program_schemas import (
     CreateProgramRequest,
     UpdateProgramRequest,
     ProgramResponse,
-    ProgramListItemResponse,
+    GetProgramsItem,
     ProgramListQueryParams,
 )
 
@@ -23,13 +23,13 @@ logger = get_logger()
 class ProgramServiceProvider:
     """Service provider for program-related business logic and database operations"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     # Core CRUD Operations
     async def get_program_by_id(self, program_id: uuid.UUID) -> Optional[Program]:
         """Get program by ID or return None if not found"""
-        result = await self.db.execute(select(Program).where(Program.id == program_id))
+        result = self.db.execute(select(Program).where(Program.id == program_id))
         return result.scalar_one_or_none()
 
     async def check_program_code_exists(
@@ -40,12 +40,12 @@ class ProgramServiceProvider:
         if exclude_id:
             query = query.where(Program.id != exclude_id)
 
-        result = await self.db.execute(query)
+        result = self.db.execute(query)
         return result.scalar_one_or_none() is not None
 
     async def create_program(
         self, program_data: CreateProgramRequest
-    ) -> Dict[str, Any]:
+    ) -> ProgramResponse:
         """Create a new program with validation"""
         # Check if program code already exists
         if await self.check_program_code_exists(program_data.program_code):
@@ -62,24 +62,22 @@ class ProgramServiceProvider:
             )
 
             self.db.add(new_program)
-            await self.db.commit()
-            await self.db.refresh(new_program)
+            self.db.commit()
+            self.db.refresh(new_program)
 
             logger.info(f"Created new program: {new_program.program_code}")
             return self._create_program_response(new_program)
 
         except IntegrityError as e:
-            await self.db.rollback()
             logger.warning(f"Integrity error creating program: {str(e)}")
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
-            await self.db.rollback()
             logger.error(f"Failed to create program: {str(e)}")
             raise RuntimeError("PROGRAM_CREATION_FAILED")
 
     async def update_program(
         self, program_id: uuid.UUID, program_data: UpdateProgramRequest
-    ) -> Dict[str, Any]:
+    ) -> ProgramResponse:
         """Update an existing program with validation"""
         # Check if program exists
         program = await self.get_program_by_id(program_id)
@@ -115,18 +113,16 @@ class ProgramServiceProvider:
             program.description = program_data.description
             program.duration_years = program_data.duration_years
 
-            await self.db.commit()
-            await self.db.refresh(program)
+            self.db.commit()
+            self.db.refresh(program)
 
             logger.info(f"Updated program: {program.program_code}")
             return self._create_program_response(program)
 
         except IntegrityError as e:
-            await self.db.rollback()
             logger.warning(f"Integrity error updating program: {str(e)}")
             raise ValueError("PROGRAM_CODE_EXISTS")
         except Exception as e:
-            await self.db.rollback()
             logger.error(f"Failed to update program {program_id}: {str(e)}")
             raise RuntimeError("PROGRAM_UPDATE_FAILED")
 
@@ -143,11 +139,11 @@ class ProgramServiceProvider:
 
         try:
             # Check if program has any active requirements
-            active_requirements_result = await self.db.execute(
+            active_requirements_result = self.db.execute(
                 select(func.count(ProgramRequirement.id)).where(
                     and_(
                         ProgramRequirement.program_id == program_id,
-                        ProgramRequirement.is_active.is_(True),
+                        ProgramRequirement.is_active == True,
                     )
                 )
             )
@@ -156,14 +152,14 @@ class ProgramServiceProvider:
             # Prevent archiving if there are active requirements
             if active_requirements_count is not None and active_requirements_count > 0:
                 raise ValueError(
-                    f"PROGRAM_HAS_ACTIVE_REQUIREMENTS: {active_requirements_count} active requirement{'s' if active_requirements_count != 1 else ''} must be archived first"
+                    f"PROGRAM_HAS_ACTIVE_REQUIREMENTS: {active_requirements_count} active requirement{'s' if active_requirements_count != 1 else ''} found"
                 )
 
             # Archive the program (no requirements to archive)
             program.is_active = False
 
-            await self.db.commit()
-            await self.db.refresh(program)
+            self.db.commit()
+            self.db.refresh(program)
 
             logger.info(f"Archived program {program.program_code}")
 
@@ -173,9 +169,7 @@ class ProgramServiceProvider:
             }
 
         except Exception as e:
-            await self.db.rollback()
-            logger.error(f"Failed to archive program {program_id}: {str(e)}")
-            raise RuntimeError("PROGRAM_ARCHIVE_FAILED")
+            raise e
 
     async def get_all_programs_with_counts(
         self, query_params: ProgramListQueryParams
@@ -191,13 +185,13 @@ class ProgramServiceProvider:
             )
 
             # Execute query
-            result = await self.db.execute(programs_query)
+            result = self.db.execute(programs_query)
             programs_data = result.all()
 
             # Transform to response models
             programs_list = []
             for row in programs_data:
-                program_item = ProgramListItemResponse(
+                program_item = GetProgramsItem(
                     id=row.id,
                     program_code=row.program_code,
                     program_name=row.program_name,
@@ -209,7 +203,7 @@ class ProgramServiceProvider:
                     active_requirements_count=row.active_requirements_count,
                     archived_requirements_count=row.archived_requirements_count,
                 )
-                programs_list.append(program_item.model_dump())
+                programs_list.append(program_item.model_dump(by_alias=True))
 
             return programs_list
 
@@ -222,28 +216,28 @@ class ProgramServiceProvider:
         self, program_id: uuid.UUID, new_duration: int
     ) -> Sequence[ProgramRequirement]:
         """Get active requirements that conflict with new program duration"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(ProgramRequirement).where(
                 and_(
                     ProgramRequirement.program_id == program_id,
-                    ProgramRequirement.is_active.is_(True),
+                    ProgramRequirement.is_active == True,
                     ProgramRequirement.target_year > new_duration,
                 )
             )
         )
         return result.scalars().all()
 
-    def _create_program_response(self, program: Program) -> Dict[str, Any]:
+    def _create_program_response(self, program: Program) -> ProgramResponse:
         """Create standardized program response data"""
         program_response = ProgramResponse(
-            id=program.id,
+            id=cast(uuid.UUID, program.id),
             program_code=program.program_code,
             program_name=program.program_name,
             description=program.description,
             duration_years=program.duration_years,
             is_active=program.is_active,
         )
-        return program_response.model_dump()
+        return program_response
 
     def _build_programs_query_with_counts(self):
         """Build optimized query for programs with requirement counts"""
@@ -253,7 +247,7 @@ class ProgramServiceProvider:
                 ProgramRequirement.program_id,
                 func.count(ProgramRequirement.id).label("active_count"),
             )
-            .where(ProgramRequirement.is_active.is_(True))
+            .where(ProgramRequirement.is_active == True)
             .group_by(ProgramRequirement.program_id)
             .subquery()
         )
@@ -264,7 +258,7 @@ class ProgramServiceProvider:
                 ProgramRequirement.program_id,
                 func.count(ProgramRequirement.id).label("archived_count"),
             )
-            .where(ProgramRequirement.is_active.is_(False))
+            .where(ProgramRequirement.is_active == False)
             .group_by(ProgramRequirement.program_id)
             .subquery()
         )
@@ -299,7 +293,7 @@ class ProgramServiceProvider:
         """Apply filters and sorting to programs query"""
         # Apply filters
         if params.is_active is not None:
-            query = query.where(Program.is_active.is_(params.is_active))
+            query = query.where(Program.is_active == params.is_active)
 
         if params.program_code:
             # Sanitize input and use case-insensitive search
@@ -345,7 +339,7 @@ class ProgramServiceProvider:
 
 # Dependency injection for service provider
 def get_program_service(
-    db: AsyncSession = Depends(get_async_session),
+    db: Session = Depends(get_sync_session),
 ) -> ProgramServiceProvider:
     """Dependency to provide ProgramServiceProvider instance"""
     return ProgramServiceProvider(db)

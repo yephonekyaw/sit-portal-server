@@ -22,7 +22,7 @@ def seed_users_staff(db_session: Session):
     # Create user
     user = User(
         id=user_id,
-        username="julian.san",
+        username="cscms",
         first_name="Julian",
         last_name="San",
         user_type=UserType.STAFF,
@@ -41,4 +41,4 @@ def seed_users_staff(db_session: Session):
     db_session.add(user)
     db_session.add(staff)
     db_session.commit()
-    logger.info("Seeded 1 staff member: Julian San (Computer Science)")
+    logger.info("Seeded 1 staff member: CSCMS (Computer Science)")

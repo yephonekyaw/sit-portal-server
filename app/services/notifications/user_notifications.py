@@ -60,7 +60,7 @@ class UserNotificationService:
                 query = query.where(NotificationRecipient.status == status_filter)
 
             if unread_only:
-                query = query.where(NotificationRecipient.read_at.is_(None))
+                query = query.where(NotificationRecipient.read_at == None)
 
             # Execute query
             result = await self.db.execute(query)
@@ -174,8 +174,8 @@ class UserNotificationService:
                     and_(
                         NotificationRecipient.recipient_id == user_id,
                         NotificationRecipient.status == NotificationStatus.DELIVERED,
-                        NotificationRecipient.read_at.is_(None),
-                        NotificationRecipient.in_app_enabled.is_(True),
+                        NotificationRecipient.read_at == None,
+                        NotificationRecipient.in_app_enabled == True,
                     )
                 )
             )
@@ -241,7 +241,7 @@ class UserNotificationService:
                 .where(
                     and_(
                         NotificationRecipient.recipient_id == user_id,
-                        NotificationRecipient.read_at.is_(None),
+                        NotificationRecipient.read_at == None,
                     )
                 )
                 .values(read_at=datetime.now(), status=NotificationStatus.READ)

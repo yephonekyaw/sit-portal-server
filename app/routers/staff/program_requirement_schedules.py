@@ -3,7 +3,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
-from app.services.program_requirement_schedule_service import (
+from app.services.staff.program_requirement_schedule_service import (
     ProgramRequirementScheduleServiceProvider,
     get_program_requirement_schedule_service,
 )
@@ -82,7 +82,9 @@ async def get_all_program_requirement_schedules(
     try:
         response_data = await schedule_service.get_all_schedules_with_details()
         schedules_count = response_data["total_count"]
-        message = ProgramRequirementScheduleServiceProvider.build_success_message(schedules_count)
+        message = ProgramRequirementScheduleServiceProvider.build_success_message(
+            schedules_count
+        )
 
         return ResponseBuilder.success(
             request=request,
@@ -151,7 +153,9 @@ async def update_program_requirement_schedule(
 ):
     """Update an existing program requirement schedule with validation"""
     try:
-        response_data = await schedule_service.update_schedule(schedule_id, schedule_data)
+        response_data = await schedule_service.update_schedule(
+            schedule_id, schedule_data
+        )
 
         return ResponseBuilder.success(
             request=request,

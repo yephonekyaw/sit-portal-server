@@ -56,7 +56,7 @@ async def daily_scheduled_notifications_processor_task(self, request_id: str):
                     NotificationRecipient.status == NotificationStatus.PENDING,
                     # Not expired
                     (
-                        Notification.expires_at.is_(None)
+                        (Notification.expires_at == None)
                         | (Notification.expires_at > datetime.now())
                     ),
                 )

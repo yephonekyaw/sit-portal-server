@@ -3,7 +3,7 @@ import uuid
 from datetime import timedelta
 
 from fastapi import Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 
@@ -16,7 +16,7 @@ from app.db.models import (
     CertificateType,
     DashboardStats,
 )
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.schemas.staff.program_requirement_schedule_schemas import (
     CreateProgramRequirementScheduleRequest,
     UpdateProgramRequirementScheduleRequest,
@@ -31,7 +31,7 @@ logger = get_logger()
 class ProgramRequirementScheduleServiceProvider:
     """Service provider for program requirement schedule-related business logic and database operations"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     # Core CRUD Operations
@@ -39,7 +39,7 @@ class ProgramRequirementScheduleServiceProvider:
         self, schedule_id: uuid.UUID
     ) -> Optional[ProgramRequirementSchedule]:
         """Get schedule by ID or return None if not found"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(ProgramRequirementSchedule).where(
                 ProgramRequirementSchedule.id == schedule_id
             )
@@ -50,7 +50,7 @@ class ProgramRequirementScheduleServiceProvider:
         self, program_requirement_id: uuid.UUID
     ) -> Optional[ProgramRequirement]:
         """Get program requirement by ID or return None if not found"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(ProgramRequirement).where(
                 ProgramRequirement.id == program_requirement_id
             )
@@ -61,7 +61,7 @@ class ProgramRequirementScheduleServiceProvider:
         self, academic_year_id: uuid.UUID
     ) -> Optional[AcademicYear]:
         """Get academic year by ID or return None if not found"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(AcademicYear).where(AcademicYear.id == academic_year_id)
         )
         return result.scalar_one_or_none()
@@ -109,7 +109,7 @@ class ProgramRequirementScheduleServiceProvider:
         self, program_requirement_id: uuid.UUID, academic_year_id: uuid.UUID
     ) -> bool:
         """Check if schedule already exists for this combination"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(ProgramRequirementSchedule).where(
                 ProgramRequirementSchedule.program_requirement_id
                 == program_requirement_id,
@@ -125,7 +125,7 @@ class ProgramRequirementScheduleServiceProvider:
         current_schedule_id: uuid.UUID,
     ) -> bool:
         """Check if schedule already exists for this combination (excluding current schedule)"""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(ProgramRequirementSchedule).where(
                 ProgramRequirementSchedule.program_requirement_id
                 == program_requirement_id,
@@ -190,18 +190,16 @@ class ProgramRequirementScheduleServiceProvider:
             )
 
             self.db.add(new_schedule)
-            await self.db.commit()
-            await self.db.refresh(new_schedule)
+            self.db.commit()
+            self.db.refresh(new_schedule)
 
             logger.info(f"Created new program requirement schedule: {new_schedule.id}")
             return self._create_schedule_response(new_schedule)
 
         except IntegrityError as e:
-            await self.db.rollback()
             logger.warning(f"Integrity error creating schedule: {str(e)}")
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
-            await self.db.rollback()
             logger.error(f"Failed to create schedule: {str(e)}")
             raise RuntimeError("SCHEDULE_CREATION_FAILED")
 
@@ -271,18 +269,16 @@ class ProgramRequirementScheduleServiceProvider:
             existing_schedule.grace_period_deadline = grace_period_deadline
             existing_schedule.start_notify_at = start_notify_at
 
-            await self.db.commit()
-            await self.db.refresh(existing_schedule)
+            self.db.commit()
+            self.db.refresh(existing_schedule)
 
             logger.info(f"Updated program requirement schedule: {existing_schedule.id}")
             return self._create_schedule_response(existing_schedule)
 
         except IntegrityError as e:
-            await self.db.rollback()
             logger.warning(f"Integrity error updating schedule: {str(e)}")
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
-            await self.db.rollback()
             logger.error(f"Failed to update schedule {schedule_id}: {str(e)}")
             raise RuntimeError("SCHEDULE_UPDATE_FAILED")
 
@@ -341,7 +337,7 @@ class ProgramRequirementScheduleServiceProvider:
                 )
             )
 
-            result = await self.db.execute(query)
+            result = self.db.execute(query)
             rows = result.fetchall()
 
             # Transform results into response format
@@ -433,7 +429,7 @@ class ProgramRequirementScheduleServiceProvider:
 
 # Dependency injection for service provider
 def get_program_requirement_schedule_service(
-    db: AsyncSession = Depends(get_async_session),
+    db: Session = Depends(get_sync_session),
 ) -> ProgramRequirementScheduleServiceProvider:
     """Dependency to provide ProgramRequirementScheduleServiceProvider instance"""
     return ProgramRequirementScheduleServiceProvider(db)

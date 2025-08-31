@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, Field, field_validator
+from pydantic import Field, field_validator
 import uuid
+
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class CreateProgramRequirementScheduleRequest(BaseModel):

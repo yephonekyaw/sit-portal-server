@@ -109,7 +109,6 @@ class CertificateServiceProvider:
             certificate.verification_template = updated_template
 
             await self.db.commit()
-            await self.db.refresh(certificate)
 
             logger.info(f"Updated certificate: {certificate.cert_code}")
             return {
@@ -144,7 +143,7 @@ class CertificateServiceProvider:
                 select(func.count(ProgramRequirement.id)).where(
                     and_(
                         ProgramRequirement.cert_type_id == certificate_id,
-                        ProgramRequirement.is_active.is_(True),
+                        ProgramRequirement.is_active == True,
                     )
                 )
             )
@@ -187,7 +186,7 @@ class CertificateServiceProvider:
                 ProgramRequirement.cert_type_id,
                 func.count(ProgramRequirement.id).label("active_count"),
             )
-            .where(ProgramRequirement.is_active.is_(True))
+            .where(ProgramRequirement.is_active == True)
             .group_by(ProgramRequirement.cert_type_id)
             .subquery()
         )
@@ -198,7 +197,7 @@ class CertificateServiceProvider:
                 ProgramRequirement.cert_type_id,
                 func.count(ProgramRequirement.id).label("archived_count"),
             )
-            .where(ProgramRequirement.is_active.is_(False))
+            .where(ProgramRequirement.is_active == False)
             .group_by(ProgramRequirement.cert_type_id)
             .subquery()
         )

@@ -1,18 +1,23 @@
-from typing import Annotated
+from typing import Annotated, cast
 import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
-from app.services.program_service import ProgramServiceProvider, get_program_service
+from app.middlewares.auth_middleware import require_staff
+from app.services.staff.program_service import (
+    ProgramServiceProvider,
+    get_program_service,
+)
 from app.schemas.staff.program_schemas import (
     CreateProgramRequest,
     UpdateProgramRequest,
     ProgramListQueryParams,
+    ProgramResponse,
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
 
-programs_router = APIRouter()
+programs_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
 def handle_service_error(request: Request, error: Exception):
@@ -24,11 +29,11 @@ def handle_service_error(request: Request, error: Exception):
         requirement_details = error_message.split(": ", 1)[1]
         return ResponseBuilder.error(
             request=request,
-            message=f"Cannot reduce program duration. Active requirements exist with target years beyond the new duration: {requirement_details}. Please update these requirements first.",
+            message=f"Cannot reduce program duration. Active requirements exist with target years beyond the new duration: {requirement_details}.",
             error_code="DURATION_CONFLICTS_WITH_REQUIREMENTS",
             status_code=status.HTTP_400_BAD_REQUEST,
         )
-    
+
     # Handle program with active requirements (special case)
     if error_message.startswith("PROGRAM_HAS_ACTIVE_REQUIREMENTS:"):
         requirement_details = error_message.split(": ", 1)[1]
@@ -109,7 +114,7 @@ async def get_all_programs(
 
 @programs_router.post(
     "/",
-    response_model=None,
+    response_model=ProgramResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new program",
     description="Create a new academic program with the provided details",
@@ -125,7 +130,7 @@ async def create_program(
 
         return ResponseBuilder.success(
             request=request,
-            data=program_response,
+            data=program_response.model_dump(by_alias=True),
             message="Program created successfully",
             status_code=status.HTTP_201_CREATED,
         )
@@ -140,7 +145,7 @@ async def create_program(
 
 @programs_router.put(
     "/{program_id}",
-    response_model=None,
+    response_model=ProgramResponse,
     status_code=status.HTTP_200_OK,
     summary="Update an existing program",
     description="Update an existing academic program. Validates that duration changes don't conflict with active requirements.",
@@ -159,7 +164,7 @@ async def update_program(
 
         return ResponseBuilder.success(
             request=request,
-            data=program_response,
+            data=program_response.model_dump(by_alias=True),
             message="Program updated successfully",
             status_code=status.HTTP_200_OK,
         )
@@ -174,7 +179,7 @@ async def update_program(
 
 @programs_router.patch(
     "/{program_id}/archive",
-    response_model=None,
+    response_model=ProgramResponse,
     status_code=status.HTTP_200_OK,
     summary="Archive an existing program",
     description="Archive an existing program and all its active requirements. Returns count of archived requirements.",
@@ -192,7 +197,9 @@ async def archive_program(
 
         return ResponseBuilder.success(
             request=request,
-            data=response_data,
+            data=cast(ProgramResponse, response_data.get("program")).model_dump(
+                by_alias=True
+            ),
             message=message,
             status_code=status.HTTP_200_OK,
         )

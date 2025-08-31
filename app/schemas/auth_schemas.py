@@ -1,4 +1,4 @@
-from pydantic import EmailStr, Field
+from pydantic import Field
 from .camel_base_model import CamelCaseBaseModel as BaseModel
 
 
