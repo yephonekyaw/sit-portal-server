@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import Field
 import uuid
 
@@ -51,3 +52,6 @@ class UpdateCertificateRequest(BaseModel):
 
 class CertificateResponse(UpdateCertificateRequest):
     """Response schema for certificate type archive operation"""
+
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")

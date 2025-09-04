@@ -1,4 +1,4 @@
-from typing import Optional, Dict, Any
+from typing import List, Optional, Dict, Any
 import uuid
 from datetime import timedelta
 
@@ -18,17 +18,16 @@ from app.db.models import (
 )
 from app.db.session import get_sync_session
 from app.schemas.staff.program_requirement_schedule_schemas import (
+    GetProgramRequirementSchedulesItem,
+    ProgramRequirementScheduleResponse,
     CreateProgramRequirementScheduleRequest,
     UpdateProgramRequirementScheduleRequest,
-    ProgramRequirementScheduleResponse,
-    ProgramRequirementScheduleListItemResponse,
-    ProgramRequirementScheduleListResponse,
 )
 
 logger = get_logger()
 
 
-class ProgramRequirementScheduleServiceProvider:
+class ProgramRequirementScheduleService:
     """Service provider for program requirement schedule-related business logic and database operations"""
 
     def __init__(self, db_session: Session):
@@ -200,8 +199,7 @@ class ProgramRequirementScheduleServiceProvider:
             logger.warning(f"Integrity error creating schedule: {str(e)}")
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
-            logger.error(f"Failed to create schedule: {str(e)}")
-            raise RuntimeError("SCHEDULE_CREATION_FAILED")
+            raise e
 
     async def update_schedule(
         self,
@@ -264,7 +262,7 @@ class ProgramRequirementScheduleServiceProvider:
             )
 
             # Update schedule fields
-            existing_schedule.academic_year_id = schedule_data.academic_year_id
+            existing_schedule.academic_year_id = schedule_data.academic_year_id  # type: ignore
             existing_schedule.submission_deadline = schedule_data.submission_deadline
             existing_schedule.grace_period_deadline = grace_period_deadline
             existing_schedule.start_notify_at = start_notify_at
@@ -279,10 +277,9 @@ class ProgramRequirementScheduleServiceProvider:
             logger.warning(f"Integrity error updating schedule: {str(e)}")
             raise ValueError("DATABASE_CONSTRAINT_VIOLATION")
         except Exception as e:
-            logger.error(f"Failed to update schedule {schedule_id}: {str(e)}")
-            raise RuntimeError("SCHEDULE_UPDATE_FAILED")
+            raise e
 
-    async def get_all_schedules_with_details(self) -> Dict[str, Any]:
+    async def get_all_schedules_with_details(self) -> List[Dict[str, Any]]:
         """Get all program requirement schedules with comprehensive related data"""
         try:
             # Complex query with all necessary joins
@@ -342,16 +339,11 @@ class ProgramRequirementScheduleServiceProvider:
 
             # Transform results into response format
             schedule_items = []
-            has_dashboard_stats = False
 
             for row in rows:
                 schedule = row[0]  # ProgramRequirementSchedule object
 
-                # Check if any dashboard stats exist
-                if row.total_submissions_required is not None:
-                    has_dashboard_stats = True
-
-                schedule_item = ProgramRequirementScheduleListItemResponse(
+                schedule_item = GetProgramRequirementSchedulesItem(
                     # Schedule core fields
                     id=schedule.id,
                     program_requirement_id=schedule.program_requirement_id,
@@ -359,6 +351,8 @@ class ProgramRequirementScheduleServiceProvider:
                     grace_period_deadline=schedule.grace_period_deadline,
                     start_notify_at=schedule.start_notify_at,
                     last_notified_at=schedule.last_notified_at,
+                    created_at=schedule.created_at,
+                    updated_at=schedule.updated_at,
                     # Program information
                     program_id=row.program_id,
                     program_code=row.program_code,
@@ -385,33 +379,29 @@ class ProgramRequirementScheduleServiceProvider:
                     late_submissions=row.late_submissions,
                     overdue_count=row.overdue_count,
                 )
-                schedule_items.append(schedule_item)
-
-            # Prepare final response
-            response_data = ProgramRequirementScheduleListResponse(
-                schedules=schedule_items,
-                total_count=len(schedule_items),
-                has_dashboard_stats=has_dashboard_stats,
-            )
+                schedule_items.append(schedule_item.model_dump(by_alias=True))
 
             logger.info(
                 f"Retrieved {len(schedule_items)} program requirement schedules"
             )
-            return response_data.model_dump()
+
+            return schedule_items
 
         except Exception as e:
-            logger.error(f"Failed to retrieve schedules: {str(e)}")
-            raise RuntimeError("SCHEDULES_RETRIEVAL_FAILED")
+            raise e
 
     # Helper Methods
     def _create_schedule_response(
         self, schedule: ProgramRequirementSchedule
     ) -> Dict[str, Any]:
         """Create standardized schedule response data"""
+
+        # IDs are already UUID types even though Pylance is complaining them as str
+        # If we wrap them with uuid.UUID(...) it will cause error
         schedule_response = ProgramRequirementScheduleResponse(
-            id=schedule.id,
-            program_requirement_id=schedule.program_requirement_id,
-            academic_year_id=schedule.academic_year_id,
+            id=schedule.id,  # type: ignore
+            program_requirement_id=schedule.program_requirement_id,  # type: ignore
+            academic_year_id=schedule.academic_year_id,  # type: ignore
             submission_deadline=schedule.submission_deadline,
             grace_period_deadline=schedule.grace_period_deadline,
             start_notify_at=schedule.start_notify_at,
@@ -419,7 +409,7 @@ class ProgramRequirementScheduleServiceProvider:
             created_at=schedule.created_at,
             updated_at=schedule.updated_at,
         )
-        return schedule_response.model_dump()
+        return schedule_response.model_dump(by_alias=True)
 
     @staticmethod
     def build_success_message(schedules_count: int) -> str:
@@ -430,6 +420,6 @@ class ProgramRequirementScheduleServiceProvider:
 # Dependency injection for service provider
 def get_program_requirement_schedule_service(
     db: Session = Depends(get_sync_session),
-) -> ProgramRequirementScheduleServiceProvider:
-    """Dependency to provide ProgramRequirementScheduleServiceProvider instance"""
-    return ProgramRequirementScheduleServiceProvider(db)
+) -> ProgramRequirementScheduleService:
+    """Dependency to provide ProgramRequirementScheduleService instance"""
+    return ProgramRequirementScheduleService(db)

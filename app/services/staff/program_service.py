@@ -231,6 +231,8 @@ class ProgramService:
             description=program.description,
             duration_years=program.duration_years,
             is_active=program.is_active,
+            created_at=program.created_at,
+            updated_at=program.updated_at,
         )
         return program_response
 

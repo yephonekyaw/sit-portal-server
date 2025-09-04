@@ -43,6 +43,8 @@ class ProgramResponse(BaseModel):
     description: str = Field(..., description="Program description")
     duration_years: int = Field(..., description="Program duration in years")
     is_active: bool = Field(..., description="Program active status")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
 
 
 class GetProgramsItem(BaseModel):

@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, Request, status, Path
 
 from app.services.staff.program_requirement_schedule_service import (
-    ProgramRequirementScheduleServiceProvider,
+    ProgramRequirementScheduleService,
     get_program_requirement_schedule_service,
 )
 from app.schemas.staff.program_requirement_schedule_schemas import (
@@ -13,8 +13,9 @@ from app.schemas.staff.program_requirement_schedule_schemas import (
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.middlewares.auth_middleware import require_staff
 
-program_requirement_schedules_router = APIRouter()
+program_requirement_schedules_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
 def handle_service_error(request: Request, error: Exception):
@@ -74,15 +75,15 @@ def handle_service_error(request: Request, error: Exception):
 )
 async def get_all_program_requirement_schedules(
     request: Request,
-    schedule_service: ProgramRequirementScheduleServiceProvider = Depends(
+    schedule_service: ProgramRequirementScheduleService = Depends(
         get_program_requirement_schedule_service
     ),
 ):
     """Get all program requirement schedules with comprehensive related data"""
     try:
         response_data = await schedule_service.get_all_schedules_with_details()
-        schedules_count = response_data["total_count"]
-        message = ProgramRequirementScheduleServiceProvider.build_success_message(
+        schedules_count = len(response_data)
+        message = ProgramRequirementScheduleService.build_success_message(
             schedules_count
         )
 
@@ -112,7 +113,7 @@ async def get_all_program_requirement_schedules(
 async def create_program_requirement_schedule(
     request: Request,
     schedule_data: CreateProgramRequirementScheduleRequest,
-    schedule_service: ProgramRequirementScheduleServiceProvider = Depends(
+    schedule_service: ProgramRequirementScheduleService = Depends(
         get_program_requirement_schedule_service
     ),
 ):
@@ -147,7 +148,7 @@ async def update_program_requirement_schedule(
     request: Request,
     schedule_id: Annotated[uuid.UUID, Path(description="Schedule ID to update")],
     schedule_data: UpdateProgramRequirementScheduleRequest,
-    schedule_service: ProgramRequirementScheduleServiceProvider = Depends(
+    schedule_service: ProgramRequirementScheduleService = Depends(
         get_program_requirement_schedule_service
     ),
 ):

@@ -109,6 +109,8 @@ class CertificateService:
                 description=certificate.description,
                 verification_template=certificate.verification_template,
                 has_expiration=certificate.has_expiration,
+                created_at=certificate.created_at,
+                updated_at=certificate.updated_at,
             )
 
         except IntegrityError:
@@ -156,6 +158,8 @@ class CertificateService:
                     description=certificate.description,
                     verification_template=certificate.verification_template,
                     has_expiration=certificate.has_expiration,
+                    created_at=certificate.created_at,
+                    updated_at=certificate.updated_at,
                 ),
                 "archived_requirements_count": 0,
             }
