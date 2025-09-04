@@ -15,7 +15,7 @@ from app.db.models import (
     ProgramRequirementSchedule,
     AcademicYear,
 )
-from app.services.dashboard_stats_service import get_dashboard_stats_service
+from app.services.staff.dashboard_stats_service import get_dashboard_stats_service
 from app.utils.logging import get_logger
 from app.utils.errors import DatabaseError
 

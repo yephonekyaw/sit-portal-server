@@ -3,8 +3,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Query, Path
 
-from app.services.submission_service import (
-    SubmissionServiceProvider,
+from app.services.staff.submission_service import (
+    SubmissionService,
     get_submission_service,
 )
 from app.schemas.staff.certificate_submission_schemas import (
@@ -73,7 +73,7 @@ async def get_certificate_submissions_by_year(
             description="Filter by submission status - True for submitted, False for not submitted"
         ),
     ] = True,
-    submission_service: SubmissionServiceProvider = Depends(get_submission_service),
+    submission_service: SubmissionService = Depends(get_submission_service),
 ):
     """Get certificate submissions for a specific academic year"""
     try:
@@ -111,13 +111,13 @@ async def get_certificate_submissions_by_year(
 async def get_verification_history_by_submission_id(
     request: Request,
     submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
-    submission_service: SubmissionServiceProvider = Depends(get_submission_service),
+    submission_service: SubmissionService = Depends(get_submission_service),
 ):
     """Get verification history for a specific certificate submission"""
     try:
         history_data = (
             await submission_service.get_verification_history_by_submission_id(
-                submission_id=submission_id
+                submission_id=str(submission_id)
             )
         )
 

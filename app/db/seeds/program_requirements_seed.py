@@ -63,7 +63,7 @@ def seed_program_requirements(db_session: Session):
             recurrence_type=ProgReqRecurrenceType.ANNUAL,
             notification_days_before_deadline=90,
             effective_from_year=2023,
-            effective_until_year=None,  # No end date
+            effective_until_year=2030,
             months_before_deadline=1,
         ),
     ]

@@ -34,7 +34,7 @@ from app.schemas.staff.certificate_submission_schemas import (
 logger = get_logger()
 
 
-class SubmissionServiceProvider:
+class SubmissionService:
     """Service provider for submission-related business logic and database operations"""
 
     def __init__(self, db_session: Session):
@@ -416,6 +416,6 @@ class SubmissionServiceProvider:
 
 def get_submission_service(
     db_session: Session = Depends(get_sync_session),
-) -> SubmissionServiceProvider:
-    """Dependency function to get SubmissionServiceProvider instance"""
-    return SubmissionServiceProvider(db_session)
+) -> SubmissionService:
+    """Dependency function to get SubmissionService instance"""
+    return SubmissionService(db_session)

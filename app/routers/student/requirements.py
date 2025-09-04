@@ -14,9 +14,9 @@ from app.schemas.staff.certificate_submission_schemas import (
 )
 from app.services.minio_service import get_minio_service, MinIOService
 from app.services.student.requirements_service import RequirementsService
-from app.services.submission_service import (
+from app.services.staff.submission_service import (
     get_submission_service,
-    SubmissionServiceProvider,
+    SubmissionService,
 )
 from app.utils.logging import get_logger
 from app.utils.responses import ResponseBuilder
@@ -122,7 +122,7 @@ async def get_student_verification_history_by_submission_id(
     request: Request,
     submission_id: Annotated[str, Path(description="Certificate submission ID")],
     current_user: AuthState = Depends(require_student),
-    submission_service: SubmissionServiceProvider = Depends(get_submission_service),
+    submission_service: SubmissionService = Depends(get_submission_service),
     db_session: Session = Depends(get_sync_session),
     minio_service: MinIOService = Depends(get_minio_service),
 ):

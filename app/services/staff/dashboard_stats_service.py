@@ -9,7 +9,7 @@ from app.db.models import (
     ProgramRequirementSchedule,
 )
 from app.db.session import get_sync_session
-from app.services.student_service import get_student_service
+from app.services.staff.student_service import get_student_service
 from app.utils.logging import get_logger
 
 logger = get_logger()
