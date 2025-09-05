@@ -15,83 +15,12 @@ from app.schemas.staff.program_requirement_schemas import (
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.utils.error_handlers import handle_service_error
 from app.middlewares.auth_middleware import require_staff
 
 program_requirements_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
-def handle_service_error(request: Request, error: Exception):
-    """Handle service errors and return appropriate error response"""
-    error_message = str(error)
-
-    # Handle specific validation errors with detailed messages
-    if error_message.startswith("TARGET_YEAR_EXCEEDS_PROGRAM_DURATION:"):
-        details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=details,
-            error_code="TARGET_YEAR_EXCEEDS_PROGRAM_DURATION",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if error_message.startswith("EFFECTIVE_FROM_YEAR_TOO_EARLY:"):
-        details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=details,
-            error_code="EFFECTIVE_FROM_YEAR_TOO_EARLY",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    if error_message.startswith("EFFECTIVE_UNTIL_YEAR_TOO_LATE:"):
-        details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=details,
-            error_code="EFFECTIVE_UNTIL_YEAR_TOO_LATE",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # For standard error codes, map to appropriate status codes
-    error_status_mapping = {
-        "PROGRAM_REQUIREMENT_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "PROGRAM_NOT_FOUND": status.HTTP_400_BAD_REQUEST,
-        "PROGRAM_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
-        "CERTIFICATE_TYPE_NOT_FOUND": status.HTTP_400_BAD_REQUEST,
-        "CERTIFICATE_TYPE_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
-        "REQUIREMENT_ALREADY_EXISTS": status.HTTP_409_CONFLICT,
-        "DATABASE_CONSTRAINT_VIOLATION": status.HTTP_400_BAD_REQUEST,
-        "PROGRAM_REQUIREMENT_ALREADY_ARCHIVED": status.HTTP_400_BAD_REQUEST,
-    }
-
-    status_code = error_status_mapping.get(
-        error_message, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
-
-    # Map error codes to user-friendly messages
-    error_messages = {
-        "PROGRAM_REQUIREMENT_NOT_FOUND": "Program requirement not found",
-        "PROGRAM_NOT_FOUND": "Program not found",
-        "PROGRAM_NOT_ACTIVE": "Cannot create requirement for inactive program",
-        "CERTIFICATE_TYPE_NOT_FOUND": "Certificate type not found",
-        "CERTIFICATE_TYPE_NOT_ACTIVE": "Cannot create requirement for inactive certificate type",
-        "REQUIREMENT_ALREADY_EXISTS": "A requirement with similar constraints already exists",
-        "DATABASE_CONSTRAINT_VIOLATION": "Database constraint violation",
-        "PROGRAM_REQUIREMENT_ALREADY_ARCHIVED": "Program requirement is already archived",
-        "PROGRAM_REQUIREMENT_CREATION_FAILED": "Failed to create program requirement",
-        "PROGRAM_REQUIREMENT_UPDATE_FAILED": "Failed to update program requirement",
-        "PROGRAM_REQUIREMENT_ARCHIVE_FAILED": "Failed to archive program requirement",
-        "PROGRAM_REQUIREMENT_RETRIEVAL_FAILED": "Failed to retrieve program requirement details",
-    }
-
-    message = error_messages.get(error_message, "An unexpected error occurred")
-
-    return ResponseBuilder.error(
-        request=request,
-        message=message,
-        error_code=error_message,
-        status_code=status_code,
-    )
 
 
 # API Endpoints

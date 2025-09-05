@@ -63,9 +63,3 @@ class CamelCaseBaseModel(BaseModel):
         # Handle other primitive types
         if isinstance(value, (str, int, float, bool)):
             return value
-
-        # For any other object, try to convert to string as fallback
-        try:
-            return str(value)
-        except Exception:
-            return None

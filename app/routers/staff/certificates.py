@@ -14,54 +14,12 @@ from app.schemas.staff.certificate_schemas import (
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.utils.error_handlers import handle_service_error
 from app.middlewares.auth_middleware import require_staff
 
 certificates_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
-def handle_service_error(request: Request, error: Exception):
-    """Handle service errors and return appropriate error response"""
-    error_message = str(error)
-
-    # Handle certificate with active requirements (special case)
-    if error_message.startswith("CERTIFICATE_TYPE_HAS_ACTIVE_REQUIREMENTS:"):
-        requirement_details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=f"Cannot archive certificate type. {requirement_details}. Please archive these requirements individually first.",
-            error_code="CERTIFICATE_TYPE_HAS_ACTIVE_REQUIREMENTS",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # For standard error codes, map to appropriate status codes
-    error_status_mapping = {
-        "CERTIFICATE_TYPE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "CERTIFICATE_CODE_EXISTS": status.HTTP_409_CONFLICT,
-        "CERTIFICATE_TYPE_ALREADY_ARCHIVED": status.HTTP_400_BAD_REQUEST,
-    }
-
-    status_code = error_status_mapping.get(
-        error_message, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
-
-    # Map error codes to user-friendly messages
-    error_messages = {
-        "CERTIFICATE_TYPE_NOT_FOUND": "Certificate type not found",
-        "CERTIFICATE_CODE_EXISTS": "Certificate type with this code already exists",
-        "CERTIFICATE_TYPE_ALREADY_ARCHIVED": "Certificate type is already archived",
-        "CERTIFICATE_TYPE_UPDATE_FAILED": "Failed to update certificate type",
-        "CERTIFICATE_TYPE_ARCHIVE_FAILED": "Failed to archive certificate type",
-        "CERTIFICATE_TYPES_RETRIEVAL_FAILED": "Failed to retrieve certificate types",
-    }
-
-    message = error_messages.get(error_message, "An unexpected error occurred")
-
-    return ResponseBuilder.error(
-        request=request,
-        message=message,
-        error_code=error_message,
-        status_code=status_code,
-    )
 
 
 # API Endpoints

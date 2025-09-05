@@ -1,5 +1,4 @@
 from typing import List, Annotated
-import uuid
 
 from fastapi import APIRouter, Depends, Request, Form, Path, status
 from sqlalchemy.orm import Session
@@ -9,7 +8,7 @@ from app.schemas.student.requirement_schemas import (
     StudentRequirementWithSubmissionResponse,
     RequirementSubmissionRequest,
 )
-from app.schemas.staff.certificate_submission_schemas import (
+from app.schemas.staff.submission_schemas import (
     VerificationHistoryListResponse,
 )
 from app.services.minio_service import get_minio_service, MinIOService

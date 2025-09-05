@@ -13,56 +13,12 @@ from app.schemas.staff.program_requirement_schedule_schemas import (
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.utils.error_handlers import handle_service_error
 from app.middlewares.auth_middleware import require_staff
 
 program_requirement_schedules_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
-def handle_service_error(request: Request, error: Exception):
-    """Handle service errors and return appropriate error response"""
-    error_message = str(error)
-
-    # Map error codes to status codes
-    error_status_mapping = {
-        "PROGRAM_REQUIREMENT_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "PROGRAM_REQUIREMENT_NOT_ACTIVE": status.HTTP_400_BAD_REQUEST,
-        "ACADEMIC_YEAR_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "SCHEDULE_ALREADY_EXISTS": status.HTTP_409_CONFLICT,
-        "SCHEDULE_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "INVALID_DEADLINE": status.HTTP_400_BAD_REQUEST,
-        "DEADLINE_OUTSIDE_ACADEMIC_YEAR": status.HTTP_400_BAD_REQUEST,
-        "INVALID_PROGRAM_REQUIREMENT_MODIFICATION": status.HTTP_400_BAD_REQUEST,
-        "DATABASE_CONSTRAINT_VIOLATION": status.HTTP_400_BAD_REQUEST,
-    }
-
-    status_code = error_status_mapping.get(
-        error_message, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
-
-    # Map error codes to user-friendly messages
-    error_messages = {
-        "PROGRAM_REQUIREMENT_NOT_FOUND": "Program requirement not found",
-        "PROGRAM_REQUIREMENT_NOT_ACTIVE": "Cannot create schedule for inactive program requirement",
-        "ACADEMIC_YEAR_NOT_FOUND": "Academic year not found",
-        "SCHEDULE_ALREADY_EXISTS": "A schedule already exists for this program requirement and academic year",
-        "SCHEDULE_NOT_FOUND": "Program requirement schedule not found",
-        "INVALID_DEADLINE": "Invalid deadline specified",
-        "DEADLINE_OUTSIDE_ACADEMIC_YEAR": "Submission deadline must be within the academic year period",
-        "INVALID_PROGRAM_REQUIREMENT_MODIFICATION": "Program requirement ID cannot be modified",
-        "DATABASE_CONSTRAINT_VIOLATION": "Database constraint violation",
-        "SCHEDULE_CREATION_FAILED": "Failed to create program requirement schedule",
-        "SCHEDULE_UPDATE_FAILED": "Failed to update program requirement schedule",
-        "SCHEDULES_RETRIEVAL_FAILED": "Failed to retrieve program requirement schedules",
-    }
-
-    message = error_messages.get(error_message, "An unexpected error occurred")
-
-    return ResponseBuilder.error(
-        request=request,
-        message=message,
-        error_code=error_message,
-        status_code=status_code,
-    )
 
 
 # API Endpoints

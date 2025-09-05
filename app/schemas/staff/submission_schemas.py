@@ -1,0 +1,132 @@
+from datetime import datetime
+from typing import List, Optional, Dict, Any
+import uuid
+from pydantic import Field
+from app.db.models import SubmissionStatus, VerificationType
+
+from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
+
+
+class StudentSubmissionItem(BaseModel):
+    # Student data
+    student_id: str = Field(..., description="Student ID")
+    student_name: str = Field(..., description="Student full name")
+    student_email: str = Field(..., description="Student email address")
+    student_enrollment_status: str = Field(..., description="Student enrollment status")
+
+    # Submission data (None if not submitted)
+    submission_id: Optional[str] = Field(None, description="Submission ID")
+    file_object_name: Optional[str] = Field(
+        None, description="File object name in MinIO"
+    )
+    filename: Optional[str] = Field(None, description="Original file name")
+    file_size: Optional[int] = Field(None, description="File size in bytes")
+    mime_type: Optional[str] = Field(None, description="File MIME type")
+    submission_status: Optional[str] = Field(
+        None, description="Current submission status"
+    )
+    agent_confidence_score: Optional[float] = Field(
+        None, description="Agent confidence score"
+    )
+    submission_timing: Optional[str] = Field(
+        None, description="Submission timing status"
+    )
+    submitted_at: Optional[str] = Field(
+        None, description="Timestamp when submitted (ISO format)"
+    )
+    expired_at: Optional[str] = Field(
+        None, description="Expiration timestamp (ISO format)"
+    )
+
+
+class SubmissionRelatedDate(BaseModel):
+    # Schedule data
+    schedule_id: str = Field(..., description="Program requirement schedule ID")
+    submission_deadline: str = Field(
+        ..., description="Submission deadline (ISO format)"
+    )
+
+    # Requirement data
+    requirement_id: str = Field(..., description="Program requirement ID")
+    requirement_name: str = Field(..., description="Requirement name")
+    target_year: int = Field(..., description="Target year for completion")
+    is_mandatory: bool = Field(..., description="Whether requirement is mandatory")
+    special_instruction: Optional[str] = Field(None, description="Special instructions")
+
+    # Program data
+    program_id: str = Field(..., description="Program ID")
+    program_code: str = Field(..., description="Program code")
+    program_name: str = Field(..., description="Program name")
+
+    # Certificate type data
+    cert_type_id: str = Field(..., description="Certificate type ID")
+    cert_code: str = Field(..., description="Certificate code")
+    cert_name: str = Field(..., description="Certificate name")
+    cert_description: str = Field(..., description="Certificate description")
+
+
+class GetListOfSubmissions(BaseModel):
+    """Response schema for list of all certificate submissions"""
+
+    submitted_submissions: List[StudentSubmissionItem] = Field(
+        ..., description="List of submitted certificate submissions"
+    )
+    unsubmitted_submissions: List[StudentSubmissionItem] = Field(
+        ..., description="List of unsubmitted certificate submissions"
+    )
+    submission_related_data: SubmissionRelatedDate = Field(
+        ..., description="Common data related to the submission"
+    )
+
+
+class VerificationHistoryResponse(BaseModel):
+    """Response schema for verification history"""
+
+    id: str = Field(..., description="Verification history ID")
+    verification_type: VerificationType = Field(
+        ..., description="Type of verification (manual/agent)"
+    )
+    old_status: SubmissionStatus = Field(..., description="Previous submission status")
+    new_status: SubmissionStatus = Field(..., description="New submission status")
+    comments: Optional[str] = Field(None, description="Verification comments")
+    reasons: Optional[str] = Field(None, description="Verification reasons")
+    agent_analysis_result: Optional[Dict[str, Any]] = Field(
+        None, description="Agent analysis result data"
+    )
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+
+class VerificationHistoryListResponse(BaseModel):
+    """Response schema for list of verification history"""
+
+    verification_history: List[VerificationHistoryResponse] = Field(
+        ..., description="List of verification history records"
+    )
+    total_count: int = Field(
+        ..., description="Total number of verification history records"
+    )
+    submission_id: str = Field(..., description="Certificate submission ID")
+
+
+class CreateVerificationHistoryRequest(BaseModel):
+    """Request schema for creating verification history"""
+
+    submission_id: uuid.UUID = Field(..., description="Certificate submission ID")
+    verification_type: VerificationType = Field(
+        ..., description="Type of verification (manual/agent)"
+    )
+    old_status: SubmissionStatus = Field(..., description="Previous submission status")
+    new_status: SubmissionStatus = Field(..., description="New submission status")
+    comments: Optional[str] = Field(
+        None, description="Verification comments", max_length=1000
+    )
+    reasons: Optional[str] = Field(
+        None, description="Verification reasons", max_length=1000
+    )
+    verifier_id: Optional[str] = Field(
+        None, description="ID of the staff member who performed verification"
+    )
+    agent_analysis_result: Optional[Dict[str, Any]] = Field(
+        None, description="Agent analysis result data"
+    )

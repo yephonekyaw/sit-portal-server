@@ -16,64 +16,9 @@ from app.schemas.staff.program_schemas import (
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
+from app.utils.error_handlers import handle_service_error
 
 programs_router = APIRouter(dependencies=[Depends(require_staff)])
-
-
-def handle_service_error(request: Request, error: Exception):
-    """Handle service errors and return appropriate error response"""
-    error_message = str(error)
-
-    # Handle duration conflicts with requirements (special case)
-    if error_message.startswith("DURATION_CONFLICTS_WITH_REQUIREMENTS:"):
-        requirement_details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=f"Cannot reduce program duration. Active requirements exist with target years beyond the new duration: {requirement_details}.",
-            error_code="DURATION_CONFLICTS_WITH_REQUIREMENTS",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # Handle program with active requirements (special case)
-    if error_message.startswith("PROGRAM_HAS_ACTIVE_REQUIREMENTS:"):
-        requirement_details = error_message.split(": ", 1)[1]
-        return ResponseBuilder.error(
-            request=request,
-            message=f"Cannot archive program. {requirement_details}. Please archive these requirements individually first.",
-            error_code="PROGRAM_HAS_ACTIVE_REQUIREMENTS",
-            status_code=status.HTTP_400_BAD_REQUEST,
-        )
-
-    # For standard error codes, map to appropriate status codes
-    error_status_mapping = {
-        "PROGRAM_NOT_FOUND": status.HTTP_404_NOT_FOUND,
-        "PROGRAM_CODE_EXISTS": status.HTTP_409_CONFLICT,
-        "PROGRAM_ALREADY_ARCHIVED": status.HTTP_400_BAD_REQUEST,
-    }
-
-    status_code = error_status_mapping.get(
-        error_message, status.HTTP_500_INTERNAL_SERVER_ERROR
-    )
-
-    # Map error codes to user-friendly messages
-    error_messages = {
-        "PROGRAM_NOT_FOUND": "Program not found",
-        "PROGRAM_CODE_EXISTS": "Program with this code already exists",
-        "PROGRAM_ALREADY_ARCHIVED": "Program is already archived",
-        "PROGRAM_CREATION_FAILED": "Failed to create program",
-        "PROGRAM_UPDATE_FAILED": "Failed to update program",
-        "PROGRAM_ARCHIVE_FAILED": "Failed to archive program",
-        "PROGRAMS_RETRIEVAL_FAILED": "Failed to retrieve programs",
-    }
-
-    message = error_messages.get(error_message, "An unexpected error occurred")
-
-    return ResponseBuilder.error(
-        request=request,
-        message=message,
-        error_code=error_message,
-        status_code=status_code,
-    )
 
 
 # API Endpoints

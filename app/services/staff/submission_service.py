@@ -1,5 +1,5 @@
 import json
-from typing import Dict, Any, Sequence
+from typing import Dict, Sequence
 from uuid import UUID
 
 from fastapi import Depends
@@ -13,22 +13,16 @@ from app.db.models import (
     Student,
     ProgramRequirement,
     ProgramRequirementSchedule,
-    AcademicYear,
     VerificationHistory,
 )
 from app.db.session import get_sync_session
-from app.schemas.staff.certificate_submission_schemas import (
-    CertificateSubmissionResponse,
-    CertificateSubmissionsListResponse,
+from app.schemas.staff.submission_schemas import (
+    GetListOfSubmissions,
+    StudentSubmissionItem,
+    SubmissionRelatedDate,
     VerificationHistoryResponse,
     VerificationHistoryListResponse,
     CreateVerificationHistoryRequest,
-    UserInfo,
-    StudentInfo,
-    ProgramInfo,
-    CertificateInfo,
-    ProgramRequirementInfo,
-    ProgramRequirementScheduleInfo,
 )
 
 logger = get_logger()
@@ -40,20 +34,50 @@ class SubmissionService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    async def get_certificate_submissions_by_year(
-        self, year_code: int, is_submitted: bool = True
-    ) -> CertificateSubmissionsListResponse:
-        """Get certificate submissions for a specific year with all related information"""
+    async def get_all_submissions_by_schedule_id(
+        self, schedule_id: str
+    ) -> GetListOfSubmissions:
+        """Get all student submissions (submitted and unsubmitted) for a specific schedule"""
         try:
-            if is_submitted:
-                return await self._get_submitted_certificates_by_year(year_code)
-            else:
-                return await self._get_non_submitted_certificates_by_year(year_code)
-        except Exception as e:
-            logger.error(
-                f"Failed to get certificate submissions for year {year_code}: {str(e)}"
+            # Validate schedule exists and load related data
+            schedule = await self._validate_schedule_exists(schedule_id)
+
+            # Get common submission related data
+            submission_related_data = self._create_submission_related_data(schedule)
+
+            # Get all students for this schedule
+            students = await self._fetch_students_for_schedule(schedule)
+
+            # Load all submissions for this schedule in a single query
+            submissions_dict = await self._fetch_submissions_by_schedule(schedule)
+
+            # Separate submitted and unsubmitted students using dictionary lookup
+            submitted_submissions = []
+            unsubmitted_submissions = []
+
+            for student in students:
+                submission = submissions_dict.get(student.id)
+
+                if submission:
+                    # Student has submitted
+                    student_item = self._transform_student_to_submission_item(
+                        student, submission
+                    )
+                    submitted_submissions.append(student_item)
+                else:
+                    # Student has not submitted
+                    student_item = self._transform_student_to_submission_item(
+                        student, None
+                    )
+                    unsubmitted_submissions.append(student_item)
+
+            return GetListOfSubmissions(
+                submitted_submissions=submitted_submissions,
+                unsubmitted_submissions=unsubmitted_submissions,
+                submission_related_data=submission_related_data,
             )
-            raise RuntimeError(f"CERTIFICATE_SUBMISSIONS_RETRIEVAL_FAILED: {str(e)}")
+        except (ValueError, Exception) as e:
+            raise e
 
     async def get_verification_history_by_submission_id(
         self, submission_id: str
@@ -78,13 +102,8 @@ class SubmissionService:
                 submission_id=submission_id,
             )
 
-        except ValueError as e:
+        except (ValueError, Exception) as e:
             raise e
-        except Exception as e:
-            logger.error(
-                f"Failed to get verification history for submission {submission_id}: {str(e)}"
-            )
-            raise RuntimeError(f"VERIFICATION_HISTORY_RETRIEVAL_FAILED: {str(e)}")
 
     async def create_verification_history(
         self,
@@ -108,103 +127,37 @@ class SubmissionService:
 
             return self._transform_verification_history_to_response(new_verification)
 
-        except ValueError as e:
+        except (ValueError, Exception) as e:
             raise e
-        except Exception as e:
-            logger.error(
-                f"Failed to create verification history for submission {submission_id}: {str(e)}"
-            )
-            raise RuntimeError(f"VERIFICATION_HISTORY_CREATION_FAILED: {str(e)}")
 
-    async def _get_submitted_certificates_by_year(
-        self, year_code: int
-    ) -> CertificateSubmissionsListResponse:
-        """Get submitted certificates with all related information"""
-        query = (
-            select(CertificateSubmission)
-            .options(
-                selectinload(CertificateSubmission.student).selectinload(Student.user),
-                selectinload(CertificateSubmission.student).selectinload(
-                    Student.program
-                ),
-                selectinload(CertificateSubmission.certificate_type),
-                selectinload(CertificateSubmission.requirement_schedule).selectinload(
-                    ProgramRequirementSchedule.program_requirement
-                ),
-                selectinload(CertificateSubmission.requirement_schedule).selectinload(
-                    ProgramRequirementSchedule.academic_year
-                ),
-            )
-            .join(CertificateSubmission.requirement_schedule)
-            .join(ProgramRequirementSchedule.academic_year)
-            .where(AcademicYear.year_code == year_code)
-            .order_by(CertificateSubmission.submitted_at.desc())
+    def _create_submission_related_data(
+        self, schedule: ProgramRequirementSchedule
+    ) -> SubmissionRelatedDate:
+        """Create common submission related data from schedule"""
+        requirement = schedule.program_requirement
+        program = requirement.program
+        cert_type = requirement.certificate_type
+
+        return SubmissionRelatedDate(
+            # Schedule data
+            schedule_id=str(schedule.id),
+            submission_deadline=schedule.submission_deadline.isoformat(),
+            # Requirement data
+            requirement_id=str(requirement.id),
+            requirement_name=requirement.name,
+            target_year=requirement.target_year,
+            is_mandatory=requirement.is_mandatory,
+            special_instruction=requirement.special_instruction,
+            # Program data
+            program_id=str(program.id),
+            program_code=program.program_code,
+            program_name=program.program_name,
+            # Certificate type data
+            cert_type_id=str(cert_type.id),
+            cert_code=cert_type.cert_code,
+            cert_name=cert_type.cert_name,
+            cert_description=cert_type.description,
         )
-
-        result = self.db.execute(query)
-        submissions = result.scalars().all()
-
-        submission_responses = [
-            self._transform_submission_to_response(submission)
-            for submission in submissions
-        ]
-
-        return CertificateSubmissionsListResponse(
-            submissions=submission_responses,
-            total_count=len(submission_responses),
-            year_code=year_code,
-            is_submitted_filter=True,
-        )
-
-    async def _get_non_submitted_certificates_by_year(
-        self, year_code: int
-    ) -> CertificateSubmissionsListResponse:
-        """Get students who haven't submitted certificates for the year"""
-        # Get all program requirement schedules for the year
-        schedules = await self._fetch_program_requirement_schedules_by_year(year_code)
-
-        not_submitted_responses = []
-
-        for schedule in schedules:
-            students = await self._fetch_students_for_schedule(schedule)
-
-            for student in students:
-                if not await self._has_student_submitted_for_schedule(
-                    student.id, schedule
-                ):
-                    response_data = self._create_non_submitted_response(
-                        student, schedule
-                    )
-                    not_submitted_responses.append(response_data)
-
-        return CertificateSubmissionsListResponse(
-            submissions=not_submitted_responses,
-            total_count=len(not_submitted_responses),
-            year_code=year_code,
-            is_submitted_filter=False,
-        )
-
-    async def _fetch_program_requirement_schedules_by_year(
-        self, year_code: int
-    ) -> Sequence[ProgramRequirementSchedule]:
-        """Fetch program requirement schedules for a given year"""
-        schedule_query = (
-            select(ProgramRequirementSchedule)
-            .options(
-                selectinload(
-                    ProgramRequirementSchedule.program_requirement
-                ).selectinload(ProgramRequirement.program),
-                selectinload(
-                    ProgramRequirementSchedule.program_requirement
-                ).selectinload(ProgramRequirement.certificate_type),
-                selectinload(ProgramRequirementSchedule.academic_year),
-            )
-            .join(ProgramRequirementSchedule.academic_year)
-            .where(AcademicYear.year_code == year_code)
-        )
-
-        result = self.db.execute(schedule_query)
-        return result.scalars().all()
 
     async def _fetch_students_for_schedule(
         self, schedule: ProgramRequirementSchedule
@@ -215,26 +168,77 @@ class SubmissionService:
             .options(selectinload(Student.user), selectinload(Student.program))
             .where(Student.program_id == schedule.program_requirement.program_id)
             .where(Student.academic_year_id == schedule.academic_year_id)
+            .order_by(Student.student_id)
         )
 
         result = self.db.execute(students_query)
         return result.scalars().all()
 
-    async def _has_student_submitted_for_schedule(
-        self, student_id: str, schedule: ProgramRequirementSchedule
-    ) -> bool:
-        """Check if student has already submitted for a schedule"""
-        existing_submission_query = select(CertificateSubmission).where(
+    async def _fetch_submissions_by_schedule(
+        self, schedule: ProgramRequirementSchedule
+    ) -> Dict[str, CertificateSubmission]:
+        """Fetch all submissions for a schedule and return as dictionary with student_id as keys"""
+        submissions_query = select(CertificateSubmission).where(
             and_(
-                CertificateSubmission.student_id == student_id,
                 CertificateSubmission.requirement_schedule_id == schedule.id,
                 CertificateSubmission.cert_type_id
                 == schedule.program_requirement.cert_type_id,
             )
         )
 
-        result = self.db.execute(existing_submission_query)
-        return result.scalar_one_or_none() is not None
+        result = self.db.execute(submissions_query)
+        submissions = result.scalars().all()
+
+        # Create dictionary mapping student_id to CertificateSubmission
+        return {submission.student_id: submission for submission in submissions}
+
+    def _transform_student_to_submission_item(
+        self, student: Student, submission: CertificateSubmission | None
+    ) -> StudentSubmissionItem:
+        """Transform student and submission data to StudentSubmissionItem"""
+        user = student.user
+
+        # Base student data
+        item = StudentSubmissionItem(
+            student_id=student.student_id,
+            student_name=f"{user.first_name} {user.last_name}",
+            student_email=student.sit_email,
+            student_enrollment_status=student.enrollment_status.value,
+            # Submission data (None if not submitted)
+            submission_id=None,
+            file_object_name=None,
+            filename=None,
+            file_size=None,
+            mime_type=None,
+            submission_status=None,
+            agent_confidence_score=None,
+            submission_timing=None,
+            submitted_at=None,
+            expired_at=None,
+        )
+
+        # If submission exists, fill in submission data
+        if submission:
+            item.submission_id = str(submission.id)
+            item.file_object_name = submission.file_object_name
+            item.filename = submission.filename
+            item.file_size = submission.file_size
+            item.mime_type = submission.mime_type
+            item.submission_status = submission.submission_status.value
+            item.agent_confidence_score = submission.agent_confidence_score
+            item.submission_timing = (
+                submission.submission_timing.value
+                if submission.submission_timing
+                else None
+            )
+            item.submitted_at = (
+                submission.submitted_at.isoformat() if submission.submitted_at else None
+            )
+            item.expired_at = (
+                submission.expired_at.isoformat() if submission.expired_at else None
+            )
+
+        return item
 
     async def _validate_submission_exists(
         self, submission_id: str
@@ -257,6 +261,36 @@ class SubmissionService:
             raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
 
         return submission
+
+    async def _validate_schedule_exists(
+        self, schedule_id: str
+    ) -> ProgramRequirementSchedule:
+        """Validate that a program requirement schedule exists"""
+        try:
+            schedule_uuid = UUID(schedule_id)
+        except ValueError:
+            raise ValueError("SCHEDULE_NOT_FOUND")
+
+        schedule = (
+            self.db.execute(
+                select(ProgramRequirementSchedule)
+                .options(
+                    selectinload(
+                        ProgramRequirementSchedule.program_requirement
+                    ).selectinload(ProgramRequirement.program),
+                    selectinload(
+                        ProgramRequirementSchedule.program_requirement
+                    ).selectinload(ProgramRequirement.certificate_type),
+                    selectinload(ProgramRequirementSchedule.academic_year),
+                )
+                .where(ProgramRequirementSchedule.id == schedule_uuid)
+            )
+        ).scalar_one_or_none()
+
+        if not schedule:
+            raise ValueError("SCHEDULE_NOT_FOUND")
+
+        return schedule
 
     async def _fetch_verification_history(
         self, submission_id: str
@@ -305,51 +339,6 @@ class SubmissionService:
 
         return new_verification
 
-    def _transform_submission_to_response(
-        self, submission: CertificateSubmission
-    ) -> CertificateSubmissionResponse:
-        """Transform submission ORM object to response schema"""
-        return CertificateSubmissionResponse(
-            # Certificate submission fields
-            id=str(submission.id),
-            file_object_name=submission.file_object_name,
-            filename=submission.filename,
-            file_size=submission.file_size,
-            mime_type=submission.mime_type,
-            submission_status=submission.submission_status,
-            agent_confidence_score=submission.agent_confidence_score,
-            submission_timing=submission.submission_timing,
-            submitted_at=submission.submitted_at,
-            expired_at=submission.expired_at,
-            created_at=submission.created_at,
-            updated_at=submission.updated_at,
-            # Related information
-            user=UserInfo(
-                first_name=submission.student.user.first_name,
-                last_name=submission.student.user.last_name,
-            ),
-            student=StudentInfo(
-                sit_email=submission.student.sit_email,
-                student_id=submission.student.student_id,
-            ),
-            program=ProgramInfo(
-                program_code=submission.student.program.program_code,
-                program_name=submission.student.program.program_name,
-            ),
-            certificate=CertificateInfo(
-                cert_code=submission.certificate_type.cert_code,
-                cert_name=submission.certificate_type.cert_name,
-            ),
-            program_requirement=ProgramRequirementInfo(
-                target_year=submission.requirement_schedule.program_requirement.target_year,
-                is_mandatory=submission.requirement_schedule.program_requirement.is_mandatory,
-            ),
-            program_requirement_schedule=ProgramRequirementScheduleInfo(
-                submission_deadline=submission.requirement_schedule.submission_deadline,
-                grace_period_deadline=submission.requirement_schedule.grace_period_deadline,
-            ),
-        )
-
     def _transform_verification_history_to_response(
         self, record: VerificationHistory
     ) -> VerificationHistoryResponse:
@@ -361,57 +350,10 @@ class SubmissionService:
             new_status=record.new_status,
             comments=record.comments,
             reasons=record.reasons,
-            agent_analysis_result=json.loads(
-                record.agent_analysis_result if record.agent_analysis_result else "{}"
-            ),
+            agent_analysis_result=None,  # agent_analysis_result=json.loads(record.agent_analysis_result if record.agent_analysis_result else "{}"),
             created_at=record.created_at,
             updated_at=record.updated_at,
         )
-
-    def _create_non_submitted_response(
-        self, student: Student, schedule: ProgramRequirementSchedule
-    ) -> Dict[str, Any]:
-        """Create response data for non-submitted students"""
-        return {
-            # Null certificate submission fields
-            "id": None,
-            "file_object_name": None,
-            "filename": None,
-            "file_size": None,
-            "mime_type": None,
-            "submission_status": None,
-            "agent_confidence_score": None,
-            "submission_timing": None,
-            "submitted_at": None,
-            "expired_at": None,
-            "created_at": None,
-            "updated_at": None,
-            # Related information
-            "user": UserInfo(
-                first_name=student.user.first_name,
-                last_name=student.user.last_name,
-            ),
-            "student": StudentInfo(
-                sit_email=student.sit_email,
-                student_id=student.student_id,
-            ),
-            "program": ProgramInfo(
-                program_code=student.program.program_code,
-                program_name=student.program.program_name,
-            ),
-            "certificate": CertificateInfo(
-                cert_code=schedule.program_requirement.certificate_type.cert_code,
-                cert_name=schedule.program_requirement.certificate_type.cert_name,
-            ),
-            "program_requirement": ProgramRequirementInfo(
-                target_year=schedule.program_requirement.target_year,
-                is_mandatory=schedule.program_requirement.is_mandatory,
-            ),
-            "program_requirement_schedule": ProgramRequirementScheduleInfo(
-                submission_deadline=schedule.submission_deadline,
-                grace_period_deadline=schedule.grace_period_deadline,
-            ),
-        }
 
 
 def get_submission_service(
