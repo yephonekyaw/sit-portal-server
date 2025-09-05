@@ -33,7 +33,6 @@ class ProgramRequirementScheduleService:
     def __init__(self, db_session: Session):
         self.db = db_session
 
-    # Core CRUD Operations
     async def get_schedule_by_id(
         self, schedule_id: uuid.UUID
     ) -> Optional[ProgramRequirementSchedule]:
@@ -94,14 +93,36 @@ class ProgramRequirementScheduleService:
         return academic_year
 
     async def validate_deadline_within_academic_year(
-        self, academic_year_id: uuid.UUID, submission_deadline
+        self,
+        academic_year_id: uuid.UUID,
+        submission_deadline,
+        program_requirement_id: uuid.UUID,
     ) -> None:
-        """Validate that submission deadline falls within the academic year"""
+        """Validate that submission deadline falls within the academic year considering program duration"""
         academic_year = await self.validate_academic_year_exists(academic_year_id)
+        program_requirement = await self.get_program_requirement_by_id(
+            program_requirement_id
+        )
 
-        if not (
-            academic_year.start_date <= submission_deadline <= academic_year.end_date
-        ):
+        if not program_requirement:
+            raise ValueError("PROGRAM_REQUIREMENT_NOT_FOUND")
+
+        # Get program to access duration_years
+        program_query = select(Program).where(
+            Program.id == program_requirement.program_id
+        )
+        program_result = self.db.execute(program_query)
+        program = program_result.scalar_one_or_none()
+
+        if not program:
+            raise ValueError("PROGRAM_NOT_FOUND")
+
+        # Calculate the extended end date based on program duration
+        extended_end_date = academic_year.start_date + timedelta(
+            days=365 * program.duration_years
+        )
+
+        if not (academic_year.start_date <= submission_deadline <= extended_end_date):
             raise ValueError("DEADLINE_OUTSIDE_ACADEMIC_YEAR")
 
     async def check_schedule_exists(
@@ -145,9 +166,11 @@ class ProgramRequirementScheduleService:
                 schedule_data.program_requirement_id
             )
 
-            # Validate academic year exists and deadline is within academic year
+            # Validate academic year exists and deadline is within academic year considering program duration
             await self.validate_deadline_within_academic_year(
-                schedule_data.academic_year_id, schedule_data.submission_deadline
+                schedule_data.academic_year_id,
+                schedule_data.submission_deadline,
+                schedule_data.program_requirement_id,
             )
 
             # Check if schedule already exists
@@ -225,9 +248,11 @@ class ProgramRequirementScheduleService:
                 schedule_data.program_requirement_id
             )
 
-            # Validate academic year exists and deadline is within academic year
+            # Validate academic year exists and deadline is within academic year considering program duration
             await self.validate_deadline_within_academic_year(
-                schedule_data.academic_year_id, schedule_data.submission_deadline
+                schedule_data.academic_year_id,
+                schedule_data.submission_deadline,
+                schedule_data.program_requirement_id,
             )
 
             # Check if schedule already exists for new academic year (excluding current)
@@ -292,6 +317,7 @@ class ProgramRequirementScheduleService:
                     CertificateType.id.label("cert_id"),
                     CertificateType.cert_code,
                     CertificateType.cert_name,
+                    AcademicYear.id.label("academic_year_id"),
                     AcademicYear.year_code.label("academic_year"),
                     ProgramRequirement.name.label("requirement_name"),
                     ProgramRequirement.target_year,
@@ -362,6 +388,7 @@ class ProgramRequirementScheduleService:
                     cert_code=row.cert_code,
                     cert_name=row.cert_name,
                     # Academic year information
+                    academic_year_id=row.academic_year_id,
                     academic_year=row.academic_year,
                     # Program requirement information
                     requirement_name=row.requirement_name,

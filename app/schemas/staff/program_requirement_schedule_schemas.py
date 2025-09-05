@@ -105,6 +105,7 @@ class GetProgramRequirementSchedulesItem(BaseModel):
     cert_name: str = Field(..., description="Certificate type name")
 
     # Academic year information
+    academic_year_id: uuid.UUID = Field(..., description="Academic year ID")
     academic_year: int = Field(..., description="Academic year code")
 
     # Program requirement information
