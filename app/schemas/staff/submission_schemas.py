@@ -9,7 +9,9 @@ from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 class StudentSubmissionItem(BaseModel):
     # Student data
+    id: str = Field(..., description="Unique identifier")
     student_id: str = Field(..., description="Student ID")
+    student_roll_number: str = Field(..., description="Student roll number")
     student_name: str = Field(..., description="Student full name")
     student_email: str = Field(..., description="Student email address")
     student_enrollment_status: str = Field(..., description="Student enrollment status")

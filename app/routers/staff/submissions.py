@@ -39,12 +39,26 @@ async def get_submissions_by_schedule_id(
             schedule_id=str(schedule_id)
         )
 
+        dumped_data = {
+            "submittedSubmissions": [
+                s.model_dump(by_alias=True)
+                for s in submissions_data.submitted_submissions
+            ],
+            "unsubmittedSubmissions": [
+                s.model_dump(by_alias=True)
+                for s in submissions_data.unsubmitted_submissions
+            ],
+            "submissionRelatedData": submissions_data.submission_related_data.model_dump(
+                by_alias=True
+            ),
+        }
+
         total_students = len(submissions_data.submitted_submissions) + len(
             submissions_data.unsubmitted_submissions
         )
         return ResponseBuilder.success(
             request=request,
-            data=submissions_data.model_dump(by_alias=True),
+            data=dumped_data,
             message=f"Retrieved {total_students} student submissions for schedule {schedule_id}",
             status_code=status.HTTP_200_OK,
         )

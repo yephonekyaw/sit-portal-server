@@ -200,7 +200,9 @@ class SubmissionService:
 
         # Base student data
         item = StudentSubmissionItem(
+            id=student.student_id,
             student_id=student.student_id,
+            student_roll_number=str(student.user_id),
             student_name=f"{user.first_name} {user.last_name}",
             student_email=student.sit_email,
             student_enrollment_status=student.enrollment_status.value,
