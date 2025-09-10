@@ -111,24 +111,18 @@ class VerificationHistoryListResponse(BaseModel):
     submission_id: str = Field(..., description="Certificate submission ID")
 
 
-class CreateVerificationHistoryRequest(BaseModel):
-    """Request schema for creating verification history"""
+class ManualVerificationRequestBody(BaseModel):
+    """Request schema for manual verification"""
 
     submission_id: uuid.UUID = Field(..., description="Certificate submission ID")
-    verification_type: VerificationType = Field(
-        ..., description="Type of verification (manual/agent)"
+    schedule_id: uuid.UUID = Field(..., description="Program requirement schedule ID")
+    status: str = Field(
+        ...,
+        description="Verification status",
     )
-    old_status: SubmissionStatus = Field(..., description="Previous submission status")
-    new_status: SubmissionStatus = Field(..., description="New submission status")
     comments: Optional[str] = Field(
         None, description="Verification comments", max_length=1000
     )
     reasons: Optional[str] = Field(
         None, description="Verification reasons", max_length=1000
-    )
-    verifier_id: Optional[str] = Field(
-        None, description="ID of the staff member who performed verification"
-    )
-    agent_analysis_result: Optional[Dict[str, Any]] = Field(
-        None, description="Agent analysis result data"
     )

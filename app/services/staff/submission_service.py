@@ -14,6 +14,8 @@ from app.db.models import (
     ProgramRequirement,
     ProgramRequirementSchedule,
     VerificationHistory,
+    SubmissionStatus,
+    VerificationType,
 )
 from app.db.session import get_sync_session
 from app.schemas.staff.submission_schemas import (
@@ -22,7 +24,7 @@ from app.schemas.staff.submission_schemas import (
     SubmissionRelatedDate,
     VerificationHistoryResponse,
     VerificationHistoryListResponse,
-    CreateVerificationHistoryRequest,
+    ManualVerificationRequestBody,
 )
 
 logger = get_logger()
@@ -85,7 +87,7 @@ class SubmissionService:
         """Get verification history for a specific certificate submission"""
         try:
             # Validate submission exists
-            await self._validate_submission_exists(submission_id)
+            await self.get_submission_by_id(submission_id)
 
             # Get verification history
             history_records = await self._fetch_verification_history(submission_id)
@@ -105,30 +107,76 @@ class SubmissionService:
         except (ValueError, Exception) as e:
             raise e
 
-    async def create_verification_history(
+    async def create_manual_verification(
         self,
-        submission_id: str,
-        verification_data: CreateVerificationHistoryRequest,
+        verification_data: ManualVerificationRequestBody,
+        verifier_id: str,
     ) -> VerificationHistoryResponse:
-        """Create a new verification history record for a certificate submission"""
+        """Create a new manual verification history record for a certificate submission"""
         try:
-            # Validate submission exists
-            await self._validate_submission_exists(submission_id)
+            # Get current submission to determine old status
+            current_submission = await self.get_submission_by_id(
+                str(verification_data.submission_id)
+            )
+
+            # Map verification status to submission status
+            status_mapping = {
+                "approved": SubmissionStatus.APPROVED,
+                "rejected": SubmissionStatus.REJECTED,
+            }
+
+            if verification_data.status not in status_mapping:
+                raise ValueError("INVALID_VERIFICATION_STATUS")
+
+            new_status = status_mapping[verification_data.status]
+            old_status = current_submission.submission_status
 
             # Validate status change
-            self._validate_status_change(
-                verification_data.old_status, verification_data.new_status
+            if old_status == new_status:
+                raise ValueError("OLD_STATUS_SAME_AS_NEW_STATUS")
+
+            # Create verification history record
+            new_verification = VerificationHistory(
+                submission_id=verification_data.submission_id,
+                verifier_id=verifier_id,
+                verification_type=VerificationType.MANUAL,
+                old_status=old_status,
+                new_status=new_status,
+                comments=verification_data.comments,
+                reasons=verification_data.reasons,
+                agent_analysis_result=None,
             )
 
-            # Create and persist verification history
-            new_verification = await self._create_and_persist_verification_history(
-                submission_id, verification_data
-            )
+            # Save verification history and update submission status in a single transaction
+            self.db.add(new_verification)
+            current_submission.submission_status = new_status
+            self.db.commit()
+            self.db.refresh(new_verification)
 
             return self._transform_verification_history_to_response(new_verification)
 
         except (ValueError, Exception) as e:
             raise e
+
+    async def get_submission_by_id(self, submission_id: str) -> CertificateSubmission:
+        """Get a certificate submission by ID"""
+        try:
+            submission_uuid = UUID(submission_id)
+        except ValueError:
+            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
+
+        submission = (
+            self.db.execute(
+                select(CertificateSubmission).where(
+                    CertificateSubmission.id == submission_uuid
+                )
+            )
+        ).scalar_one_or_none()
+
+        if not submission:
+            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
+
+        return submission
 
     def _create_submission_related_data(
         self, schedule: ProgramRequirementSchedule
@@ -242,28 +290,6 @@ class SubmissionService:
 
         return item
 
-    async def _validate_submission_exists(
-        self, submission_id: str
-    ) -> CertificateSubmission:
-        """Validate that a submission exists"""
-        try:
-            submission_uuid = UUID(submission_id)
-        except ValueError:
-            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
-
-        submission = (
-            self.db.execute(
-                select(CertificateSubmission).where(
-                    CertificateSubmission.id == submission_uuid
-                )
-            )
-        ).scalar_one_or_none()
-
-        if not submission:
-            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
-
-        return submission
-
     async def _validate_schedule_exists(
         self, schedule_id: str
     ) -> ProgramRequirementSchedule:
@@ -311,35 +337,6 @@ class SubmissionService:
 
         history_result = self.db.execute(history_query)
         return history_result.scalars().all()
-
-    def _validate_status_change(self, old_status, new_status):
-        """Validate that status change is valid"""
-        if old_status == new_status:
-            raise ValueError("OLD_STATUS_SAME_AS_NEW_STATUS")
-
-    async def _create_and_persist_verification_history(
-        self,
-        submission_id: str,
-        verification_data: CreateVerificationHistoryRequest,
-    ) -> VerificationHistory:
-        """Create and persist verification history record"""
-        submission_uuid = UUID(submission_id)
-        new_verification = VerificationHistory(
-            submission_id=submission_uuid,
-            verifier_id=verification_data.verifier_id,
-            verification_type=verification_data.verification_type,
-            old_status=verification_data.old_status,
-            new_status=verification_data.new_status,
-            comments=verification_data.comments,
-            reasons=verification_data.reasons,
-            agent_analysis_result=verification_data.agent_analysis_result,
-        )
-
-        self.db.add(new_verification)
-        self.db.flush()  # Flush to get the ID
-        self.db.refresh(new_verification)  # Refresh to get all fields
-
-        return new_verification
 
     def _transform_verification_history_to_response(
         self, record: VerificationHistory

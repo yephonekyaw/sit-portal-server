@@ -140,8 +140,6 @@ async def get_student_verification_history_by_submission_id(
             submission_id, student.id
         )
 
-        print("Ownership validated")
-
         # Get verification history using submission service
         history_data = (
             await submission_service.get_verification_history_by_submission_id(
@@ -149,9 +147,17 @@ async def get_student_verification_history_by_submission_id(
             )
         )
 
+        dumped_data = {
+            "verificationHistory": [
+                vh.model_dump(by_alias=True) for vh in history_data.verification_history
+            ],
+            "totalCount": history_data.total_count,
+            "submissionId": str(submission_id),
+        }
+
         return ResponseBuilder.success(
             request=request,
-            data=history_data.model_dump(by_alias=True),
+            data=dumped_data,
             message=f"Retrieved {history_data.total_count} verification history record{'s' if history_data.total_count != 1 else ''} for submission",
             status_code=status.HTTP_200_OK,
         )

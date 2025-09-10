@@ -10,6 +10,8 @@ from app.services.staff.submission_service import (
 from app.schemas.staff.submission_schemas import (
     GetListOfSubmissions,
     VerificationHistoryListResponse,
+    ManualVerificationRequestBody,
+    VerificationHistoryResponse,
 )
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
@@ -92,9 +94,17 @@ async def get_verification_history_by_submission_id(
             )
         )
 
+        dumped_data = {
+            "verificationHistory": [
+                vh.model_dump(by_alias=True) for vh in history_data.verification_history
+            ],
+            "totalCount": history_data.total_count,
+            "submissionId": str(submission_id),
+        }
+
         return ResponseBuilder.success(
             request=request,
-            data=history_data.model_dump(by_alias=True),
+            data=dumped_data,
             message=f"Retrieved {history_data.total_count} verification history record{'s' if history_data.total_count != 1 else ''} for submission",
             status_code=status.HTTP_200_OK,
         )
@@ -105,4 +115,50 @@ async def get_verification_history_by_submission_id(
         raise BusinessLogicError(
             message="Failed to retrieve verification history",
             error_code="VERIFICATION_HISTORY_RETRIEVAL_FAILED",
+        )
+
+
+@submissions_router.post(
+    "/{submission_id}/verify",
+    response_model=VerificationHistoryResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Manual verification of a certificate submission",
+    description="Perform manual verification of a certificate submission by staff member",
+)
+async def verify_submission(
+    request: Request,
+    submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
+    verification_data: ManualVerificationRequestBody,
+    submission_service: SubmissionService = Depends(get_submission_service),
+):
+    """Perform manual verification of a certificate submission"""
+    try:
+        # Validate that submission_id in path matches the one in body
+        if submission_id != verification_data.submission_id:
+            raise ValueError("SUBMISSION_ID_MISMATCH")
+
+        # Get verifier ID from auth context
+        verifier_id = (
+            request.state.auth.user_id if hasattr(request.state, "auth") else None
+        )
+
+        # Create manual verification
+        verification_result = await submission_service.create_manual_verification(
+            verification_data=verification_data,
+            verifier_id=str(verifier_id),
+        )
+
+        return ResponseBuilder.success(
+            request=request,
+            data=verification_result.model_dump(by_alias=True),
+            message=f"Submission {verification_data.status} successfully",
+            status_code=status.HTTP_201_CREATED,
+        )
+
+    except (ValueError, RuntimeError) as e:
+        return handle_service_error(request, e)
+    except Exception as e:
+        raise BusinessLogicError(
+            message="Failed to verify submission",
+            error_code="SUBMISSION_VERIFICATION_FAILED",
         )
