@@ -18,22 +18,9 @@ engine = create_engine(
 )
 
 SessionLocal = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
-AsyncSessionLocal = SessionLocal
 
 
 def get_sync_session():
-    """Dependency to get sync database session"""
-    db = SessionLocal()
-    try:
-        yield db
-    except Exception:
-        db.rollback()
-        raise
-    finally:
-        db.close()
-
-
-def get_async_session():
     """Dependency to get sync database session"""
     db = SessionLocal()
     try:

@@ -3,12 +3,17 @@ from datetime import datetime
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import select
 
 from app.db.models import (
     DashboardStats,
     ProgramRequirementSchedule,
+    ProgramRequirement,
+    Program,
+    AcademicYear,
 )
 from app.db.session import get_sync_session
+from app.schemas.staff.dashboard_stats_schemas import DashboardStatsResponse
 from app.services.staff.student_service import get_student_service
 from app.utils.logging import get_logger
 
@@ -21,65 +26,6 @@ class DashboardStatsService:
     def __init__(self, db_session: Session):
         self.db = db_session
         self.student_service = get_student_service(db_session)
-
-    async def create_dashboard_stats_for_schedule(
-        self,
-        schedule_data: ProgramRequirementSchedule,
-        program_code: str,
-        academic_year_code: int,
-        cert_type_id: uuid.UUID,
-        program_id: uuid.UUID,
-    ) -> DashboardStats:
-        """
-        Create a new dashboard stats record for a program requirement schedule.
-        This is called when a new schedule is created in the monthly schedule creator task.
-        Args:
-            schedule_data: Dictionary containing schedule information
-            program_code: Program code for student count lookup
-            academic_year_code: Academic year code for student count lookup
-            cert_type_id: Certificate type ID
-            program_id: Program ID
-
-        Returns:
-            The created DashboardStats instance
-        """
-        # Get the total number of students who need to submit for this requirement
-        total_submissions_required = (
-            await self.student_service.get_active_student_count_by_program_and_year(
-                program_code=program_code,
-                academic_year_code=academic_year_code,
-            )
-        )
-
-        # Create the dashboard stats record
-        dashboard_stats = DashboardStats(
-            id=uuid.uuid4(),
-            requirement_schedule_id=schedule_data.id,
-            program_id=program_id,
-            academic_year_id=schedule_data.academic_year_id,
-            cert_type_id=cert_type_id,
-            total_submissions_required=total_submissions_required,
-            submitted_count=0,
-            approved_count=0,
-            rejected_count=0,
-            pending_count=0,
-            manual_review_count=0,
-            not_submitted_count=total_submissions_required,
-            on_time_submissions=0,
-            late_submissions=0,
-            overdue_count=0,
-            manual_verification_count=0,
-            agent_verification_count=0,
-            last_calculated_at=datetime.now(),
-        )
-
-        self.db.add(dashboard_stats)
-
-        logger.info(
-            f"Created dashboard stats for schedule {schedule_data.id} - {program_code} year {academic_year_code}: {total_submissions_required} students"
-        )
-
-        return dashboard_stats
 
     async def update_dashboard_stats_counts(
         self,
@@ -109,11 +55,10 @@ class DashboardStatsService:
         Raises:
             ValueError: If the dashboard stats record is not found
         """
-        dashboard_stats = (
-            self.db.query(DashboardStats)
-            .filter(DashboardStats.id == dashboard_stats_id)
-            .first()
+        result = self.db.execute(
+            select(DashboardStats).where(DashboardStats.id == dashboard_stats_id)
         )
+        dashboard_stats = result.scalar_one_or_none()
 
         if not dashboard_stats:
             raise ValueError(f"Dashboard stats with ID {dashboard_stats_id} not found")
@@ -170,11 +115,12 @@ class DashboardStatsService:
         Raises:
             ValueError: If no dashboard stats record is found for the schedule
         """
-        dashboard_stats = (
-            self.db.query(DashboardStats)
-            .filter(DashboardStats.requirement_schedule_id == requirement_schedule_id)
-            .first()
+        result = self.db.execute(
+            select(DashboardStats).where(
+                DashboardStats.requirement_schedule_id == requirement_schedule_id
+            )
         )
+        dashboard_stats = result.scalar_one_or_none()
 
         if not dashboard_stats:
             raise ValueError(
@@ -195,6 +141,145 @@ class DashboardStatsService:
             manual_verification_count_delta=manual_verification_count_delta,
             agent_verification_count_delta=agent_verification_count_delta,
         )
+
+    def get_dashboard_stats_by_schedule(
+        self, requirement_schedule_id: uuid.UUID
+    ) -> DashboardStatsResponse:
+        """
+        Get dashboard stats by requirement schedule ID.
+
+        Args:
+            requirement_schedule_id: The ID of the requirement schedule
+
+        Returns:
+            The DashboardStatsResponse instance
+
+        Raises:
+            ValueError: If no dashboard stats record is found for the schedule
+        """
+        result = self.db.execute(
+            select(DashboardStats).where(
+                DashboardStats.requirement_schedule_id == requirement_schedule_id
+            )
+        )
+        dashboard_stats = result.scalar_one_or_none()
+
+        if not dashboard_stats:
+            raise ValueError(
+                f"Dashboard stats for schedule {requirement_schedule_id} not found"
+            )
+
+        dashboard_stats_response = DashboardStatsResponse(
+            id=str(dashboard_stats.id),
+            requirement_schedule_id=str(dashboard_stats.requirement_schedule_id),
+            program_id=str(dashboard_stats.program_id),
+            academic_year_id=str(dashboard_stats.academic_year_id),
+            cert_type_id=str(dashboard_stats.cert_type_id),
+            total_submissions_required=dashboard_stats.total_submissions_required,
+            submitted_count=dashboard_stats.submitted_count,
+            approved_count=dashboard_stats.approved_count,
+            rejected_count=dashboard_stats.rejected_count,
+            pending_count=dashboard_stats.pending_count,
+            manual_review_count=dashboard_stats.manual_review_count,
+            not_submitted_count=dashboard_stats.not_submitted_count,
+            on_time_submissions=dashboard_stats.on_time_submissions,
+            late_submissions=dashboard_stats.late_submissions,
+            overdue_count=dashboard_stats.overdue_count,
+            manual_verification_count=dashboard_stats.manual_verification_count,
+            agent_verification_count=dashboard_stats.agent_verification_count,
+            last_calculated_at=dashboard_stats.last_calculated_at,
+            created_at=dashboard_stats.created_at,
+            updated_at=dashboard_stats.updated_at,
+        )
+
+        return dashboard_stats_response
+
+    async def create_dashboard_stats_by_schedule_id(
+        self, schedule_id: uuid.UUID
+    ) -> DashboardStats:
+        """
+        Create dashboard stats for a given schedule ID by automatically determining
+        all necessary information from database relationships.
+
+        Args:
+            schedule_id: The ID of the program requirement schedule
+
+        Returns:
+            The created DashboardStats instance
+
+        Raises:
+            ValueError: If schedule not found or required data is missing
+        """
+        # Get schedule with all related data in a single query
+        query = (
+            select(
+                ProgramRequirementSchedule,
+                ProgramRequirement.program_id,
+                ProgramRequirement.cert_type_id,
+                Program.program_code,
+                AcademicYear.year_code,
+            )
+            .select_from(ProgramRequirementSchedule)
+            .join(
+                ProgramRequirement,
+                ProgramRequirementSchedule.program_requirement_id
+                == ProgramRequirement.id,
+            )
+            .join(Program, ProgramRequirement.program_id == Program.id)
+            .join(
+                AcademicYear,
+                ProgramRequirementSchedule.academic_year_id == AcademicYear.id,
+            )
+            .where(ProgramRequirementSchedule.id == schedule_id)
+        )
+
+        result = self.db.execute(query)
+        row = result.first()
+
+        if not row:
+            raise ValueError(
+                f"Schedule with ID {schedule_id} not found or has missing related data"
+            )
+
+        schedule, program_id, cert_type_id, program_code, academic_year_code = row
+
+        # Get total student count for this program and academic year
+        total_submissions_required = (
+            await self.student_service.get_active_student_count_by_program_and_year(
+                program_code=program_code,
+                academic_year_code=academic_year_code,
+            )
+        )
+
+        # Create dashboard stats record
+        dashboard_stats = DashboardStats(
+            id=uuid.uuid4(),
+            requirement_schedule_id=schedule.id,
+            program_id=program_id,
+            academic_year_id=schedule.academic_year_id,
+            cert_type_id=cert_type_id,
+            total_submissions_required=total_submissions_required,
+            submitted_count=0,
+            approved_count=0,
+            rejected_count=0,
+            pending_count=0,
+            manual_review_count=0,
+            not_submitted_count=total_submissions_required,
+            on_time_submissions=0,
+            late_submissions=0,
+            overdue_count=0,
+            manual_verification_count=0,
+            agent_verification_count=0,
+            last_calculated_at=datetime.now(),
+        )
+
+        self.db.add(dashboard_stats)
+        self.db.commit()
+        self.db.refresh(dashboard_stats)
+
+        logger.info(f"Created dashboard stats for schedule {schedule_id}")
+
+        return dashboard_stats
 
 
 def get_dashboard_stats_service(

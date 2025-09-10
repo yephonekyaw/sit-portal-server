@@ -1,10 +1,10 @@
 from typing import Dict, Any, Optional, List
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.db.models import NotificationRecipient, Notification, NotificationStatus
 from app.utils.logging import get_logger
@@ -16,7 +16,7 @@ logger = get_logger()
 class UserNotificationService:
     """Service for retrieving and managing user notifications"""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
 
     async def get_user_notifications(
@@ -63,7 +63,7 @@ class UserNotificationService:
                 query = query.where(NotificationRecipient.read_at == None)
 
             # Execute query
-            result = await self.db.execute(query)
+            result = self.db.execute(query)
             notification_recipients = result.scalars().all()
 
             # Format notifications with content
@@ -75,9 +75,9 @@ class UserNotificationService:
                     # Get formatted message content using our notification service
                     message = await self._get_notification_content(
                         notification.notification_type.code,
-                        notification.entity_id,
+                        notification.entity_id,  # type: ignore
                         channel_type="in_app",  # Use lowercase to match ChannelType enum
-                        notification_id=notification.id,
+                        notification_id=notification.id,  # type: ignore
                     )
 
                     formatted_notification = {
@@ -169,7 +169,7 @@ class UserNotificationService:
         try:
             from sqlalchemy import func
 
-            result = await self.db.execute(
+            result = self.db.execute(
                 select(func.count(NotificationRecipient.id)).where(
                     and_(
                         NotificationRecipient.recipient_id == user_id,
@@ -194,7 +194,7 @@ class UserNotificationService:
         """Mark a specific notification as read for a user"""
         try:
             # Find the notification recipient
-            result = await self.db.execute(
+            result = self.db.execute(
                 select(NotificationRecipient).where(
                     and_(
                         NotificationRecipient.id == notification_recipient_id,
@@ -214,7 +214,7 @@ class UserNotificationService:
             if recipient.read_at is None:
                 recipient.read_at = datetime.now()
                 recipient.status = NotificationStatus.READ
-                await self.db.commit()
+                self.db.commit()
 
                 logger.info(
                     f"Marked notification {notification_recipient_id} as read for user {user_id}"
@@ -224,7 +224,6 @@ class UserNotificationService:
             return True  # Already read
 
         except Exception as e:
-            await self.db.rollback()
             logger.error(
                 f"Failed to mark notification as read: {str(e)}", exc_info=True
             )
@@ -236,7 +235,7 @@ class UserNotificationService:
             from sqlalchemy import update
 
             # Update all unread notifications for the user
-            result = await self.db.execute(
+            result = self.db.execute(
                 update(NotificationRecipient)
                 .where(
                     and_(
@@ -248,7 +247,7 @@ class UserNotificationService:
                 .execution_options(synchronize_session=False)
             )
 
-            await self.db.commit()
+            self.db.commit()
             updated_count = result.rowcount
 
             logger.info(
@@ -257,7 +256,6 @@ class UserNotificationService:
             return updated_count
 
         except Exception as e:
-            await self.db.rollback()
             logger.error(
                 f"Failed to mark all notifications as read for user {user_id}: {str(e)}",
                 exc_info=True,
@@ -282,7 +280,7 @@ class UserNotificationService:
             from sqlalchemy import update
 
             # Update all non-expired notifications for the user to expired status
-            result = await self.db.execute(
+            result = self.db.execute(
                 update(NotificationRecipient)
                 .where(
                     and_(
@@ -294,14 +292,14 @@ class UserNotificationService:
                 .execution_options(synchronize_session=False)
             )
 
-            await self.db.commit()
+            self.db.commit()
             updated_count = result.rowcount
 
             logger.info(f"Cleared {updated_count} notifications for user {user_id}")
             return updated_count
 
         except Exception as e:
-            await self.db.rollback()
+            self.db.rollback()
             logger.error(
                 f"Failed to clear notifications for user {user_id}: {str(e)}",
                 exc_info=True,
@@ -340,6 +338,6 @@ class UserNotificationService:
 
 
 # Dependency injection function
-def get_user_notification_service(db_session: AsyncSession) -> UserNotificationService:
+def get_user_notification_service(db_session: Session) -> UserNotificationService:
     """Dependency to provide UserNotificationService instance"""
     return UserNotificationService(db_session)

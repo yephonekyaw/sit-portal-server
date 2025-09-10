@@ -14,6 +14,7 @@ from .academic_years_seed import seed_academic_years
 from .certificate_types_seed import seed_certificate_types
 from .program_requirements_seed import seed_program_requirements
 from .program_requirement_schedules_seed import seed_program_requirement_schedules
+from .dashboard_stats_seed import seed_dashboard_stats
 from .notification_types_seed import seed_notification_types
 from .notification_channel_templates_seed import seed_notification_channel_templates
 from .roles_seed import seed_roles
@@ -61,6 +62,12 @@ def seed_all_data():
         # Phase 3: Junction/relationship tables
         logger.info("Phase 3: Seeding relationship tables...")
         seed_staff_permissions(db_session)  # Depends on staff + permissions
+
+        # Phase 4: Tables that depend on multiple others
+        logger.info("Phase 4: Seeding complex dependent tables...")
+        seed_dashboard_stats(
+            db_session
+        )  # Depends on program_requirement_schedules, programs, certificate_types + academic_years
 
         logger.info("Database seeding completed successfully!")
         return True

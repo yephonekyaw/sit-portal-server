@@ -1,5 +1,5 @@
 from typing import Dict, Callable, Optional
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from .base import BaseNotificationService
 from .certificate_service import create_certificate_service
@@ -13,7 +13,7 @@ class NotificationServiceRegistry:
     """Registry for notification service creation"""
 
     # Map notification codes to factory functions
-    _factories: Dict[str, Callable[[AsyncSession, str], BaseNotificationService]] = {
+    _factories: Dict[str, Callable[[Session, str], BaseNotificationService]] = {
         # Certificate submission notifications
         "certificate_submission_submit": create_certificate_service,
         "certificate_submission_update": create_certificate_service,
@@ -30,7 +30,7 @@ class NotificationServiceRegistry:
 
     @classmethod
     def create_service(
-        cls, notification_code: str, db_session: AsyncSession
+        cls, notification_code: str, db_session: Session
     ) -> Optional[BaseNotificationService]:
         """Create service instance for notification code"""
         factory = cls._factories.get(notification_code)
@@ -46,7 +46,7 @@ class NotificationServiceRegistry:
     def register_service(
         cls,
         notification_code: str,
-        factory: Callable[[AsyncSession, str], BaseNotificationService],
+        factory: Callable[[Session, str], BaseNotificationService],
     ):
         """Register a custom factory function for a notification code"""
         cls._factories[notification_code] = factory

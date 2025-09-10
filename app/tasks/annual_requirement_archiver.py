@@ -1,18 +1,18 @@
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime
 from typing import List
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, update
 
 from app.celery import celery
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.db.models import ProgramRequirement
 from app.utils.logging import get_logger
-from app.utils.errors import DatabaseError
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
-async def annual_requirement_archiver_task(self, request_id: str):
+def annual_requirement_archiver_task(self, request_id: str):
     """
     Annual task to archive expired program requirements.
 
@@ -32,80 +32,65 @@ async def annual_requirement_archiver_task(self, request_id: str):
     Args:
         request_id: Request ID for tracking purposes
     """
+    return asyncio.run(_async_annual_requirement_archiver(request_id))
+
+
+async def _async_annual_requirement_archiver(request_id: str):
     logger = get_logger().bind(request_id=request_id)
-    db_session: AsyncSession | None = None
 
-    try:
-        # Get async database session
-        async for db_session in get_async_session():
-            break
+    # Get async database session
+    for db_session in get_sync_session():
+        try:
+            current_datetime = datetime.now()
+            current_academic_year = _calculate_current_academic_year(current_datetime)
 
-        if not db_session:
-            raise DatabaseError("Failed to get database session")
+            logger.info(
+                "Starting annual requirement archiver task",
+                current_datetime=current_datetime.isoformat(),
+                current_academic_year=current_academic_year,
+                request_id=request_id,
+            )
 
-        current_datetime = datetime.now()
-        current_academic_year = _calculate_current_academic_year(current_datetime)
+            # Find all active requirements that have expired
+            expired_requirements = await _get_expired_requirements(
+                db_session, current_academic_year
+            )
 
-        logger.info(
-            "Starting annual requirement archiver task",
-            current_datetime=current_datetime.isoformat(),
-            current_academic_year=current_academic_year,
-            request_id=request_id,
-        )
+            if not expired_requirements:
+                logger.info("No expired requirements found to archive")
+                return {
+                    "success": True,
+                    "archived_count": 0,
+                    "current_academic_year": current_academic_year,
+                    "request_id": request_id,
+                }
 
-        # Find all active requirements that have expired
-        expired_requirements = await _get_expired_requirements(
-            db_session, current_academic_year
-        )
+            # Archive expired requirements by setting is_active = False
 
-        if not expired_requirements:
-            logger.info("No expired requirements found to archive")
+            archived_count = await _archive_expired_requirements(
+                db_session, expired_requirements
+            )
+
+            logger.info(
+                "Annual requirement archiver task completed",
+                archived_count=archived_count,
+                current_academic_year=current_academic_year,
+            )
+
             return {
                 "success": True,
-                "archived_count": 0,
+                "archived_count": archived_count,
                 "current_academic_year": current_academic_year,
                 "request_id": request_id,
             }
-
-        # Archive expired requirements by setting is_active = False
-
-        archived_count = await _archive_expired_requirements(
-            db_session, expired_requirements
-        )
-
-        logger.info(
-            "Annual requirement archiver task completed",
-            archived_count=archived_count,
-            current_academic_year=current_academic_year,
-        )
-
-        return {
-            "success": True,
-            "archived_count": archived_count,
-            "current_academic_year": current_academic_year,
-            "request_id": request_id,
-        }
-
-    except Exception as e:
-        logger.error(
-            "Annual requirement archiver task exception",
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
-
-        if db_session:
-            await db_session.rollback()
-
-        # Retry with exponential backoff for transient errors
-        if self.request.retries < self.max_retries:
-            retry_delay = min(2**self.request.retries * 60, 600)  # Cap at 10 minutes
-            raise self.retry(countdown=retry_delay)
-
-        return {"success": False, "error": str(e), "request_id": request_id}
-    finally:
-        if db_session:
-            await db_session.close()
+        except Exception as e:
+            logger.error(
+                "Annual requirement archiver task exception",
+                request_id=request_id,
+                error=str(e),
+                exc_info=True,
+            )
+            return {"success": False, "error": str(e), "request_id": request_id}
 
 
 def _calculate_current_academic_year(current_datetime: datetime) -> int:
@@ -125,7 +110,7 @@ def _calculate_current_academic_year(current_datetime: datetime) -> int:
 
 
 async def _get_expired_requirements(
-    db_session: AsyncSession, current_academic_year: int
+    db_session: Session, current_academic_year: int
 ) -> List[ProgramRequirement]:
     """
     Get all active program requirements that have expired.
@@ -142,7 +127,7 @@ async def _get_expired_requirements(
     Returns:
         List of expired ProgramRequirement objects
     """
-    result = await db_session.execute(
+    result = db_session.execute(
         select(ProgramRequirement)
         .where(
             and_(
@@ -161,7 +146,7 @@ async def _get_expired_requirements(
 
 
 async def _archive_expired_requirements(
-    db_session: AsyncSession, expired_requirements: List[ProgramRequirement]
+    db_session: Session, expired_requirements: List[ProgramRequirement]
 ) -> int:
     """
     Archive expired requirements by setting is_active = False.
@@ -182,14 +167,14 @@ async def _archive_expired_requirements(
     requirement_ids = [req.id for req in expired_requirements]
 
     # Perform batch update to set is_active = False
-    result = await db_session.execute(
+    result = db_session.execute(
         update(ProgramRequirement)
         .where(ProgramRequirement.id.in_(requirement_ids))
         .values(is_active=False)
     )
 
     # Commit the changes
-    await db_session.commit()
+    db_session.commit()
 
     # Return the number of updated rows
     return result.rowcount

@@ -1,13 +1,14 @@
-from datetime import datetime, timezone, timedelta
-from typing import Any, List, Dict, cast
+from datetime import datetime, timedelta
+from typing import Any, List, Dict
 import uuid
+import asyncio
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, update
 from sqlalchemy.orm import selectinload
 
 from app.celery import celery
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.db.models import (
     ProgramRequirementSchedule,
     ActorType,
@@ -17,11 +18,10 @@ from app.services.notifications.utils import (
     create_notification_async,
 )
 from app.utils.logging import get_logger
-from app.utils.errors import DatabaseError
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
-async def daily_requirement_notifier_task(self, request_id: str):
+def daily_requirement_notifier_task(self, request_id: str):
     """
     Daily task to send requirement deadline notifications to students.
 
@@ -43,136 +43,123 @@ async def daily_requirement_notifier_task(self, request_id: str):
     Args:
         request_id: Request ID for tracking purposes
     """
+
+    return asyncio.run(_async_daily_requirement_notifier(request_id))
+
+
+async def _async_daily_requirement_notifier(request_id: str):
     logger = get_logger().bind(request_id=request_id)
-    db_session: AsyncSession | None = None
 
-    try:
-        # Get async database session
-        async for db_session in get_async_session():
-            break
+    for db_session in get_sync_session():
+        try:
+            current_datetime = datetime.now()
 
-        if not db_session:
-            raise DatabaseError("Failed to get database session")
+            # Get all requirement schedules that might need notifications
+            eligible_schedules = await _get_eligible_requirement_schedules(
+                db_session, current_datetime
+            )
 
-        current_datetime = datetime.now()
+            if not eligible_schedules:
+                return {
+                    "success": True,
+                    "processed_count": 0,
+                    "notifications_sent": 0,
+                    "request_id": request_id,
+                }
 
-        # Get all requirement schedules that might need notifications
-        eligible_schedules = await _get_eligible_requirement_schedules(
-            db_session, current_datetime
-        )
+            processed_count = 0
+            notifications_sent = 0
 
-        if not eligible_schedules:
+            for schedule in eligible_schedules:
+                try:
+                    processed_count += 1
+
+                    # Calculate days until/past deadline
+                    days_until_deadline = (
+                        schedule.submission_deadline.date() - current_datetime.date()
+                    ).days
+
+                    days_until_grace_end = (
+                        schedule.grace_period_deadline.date() - current_datetime.date()
+                    ).days
+
+                    # Determine if notification should be sent based on timing rules
+                    notification_decision = _should_send_notification(
+                        schedule,
+                        days_until_deadline,
+                        days_until_grace_end,
+                        current_datetime,
+                    )
+
+                    if not notification_decision["should_send"]:
+                        continue
+
+                    # Get recipient student user IDs
+                    recipient_ids = await get_student_user_ids_for_requirement_schedule(
+                        db_session, schedule.id  # type: ignore
+                    )
+
+                    if not recipient_ids:
+                        continue
+
+                    # Create notification
+                    expires_at = current_datetime + timedelta(days=15)
+
+                    create_notification_async(
+                        request_id=request_id,
+                        notification_code=notification_decision["notification_code"],
+                        entity_id=schedule.id,  # type: ignore
+                        actor_type=ActorType.SYSTEM.value,
+                        recipient_ids=recipient_ids,
+                        actor_id=None,
+                        scheduled_for=None,
+                        expires_at=expires_at,
+                        in_app_enabled=True,
+                        line_app_enabled=True,
+                    )
+
+                    # Update last_notified_at
+                    await _update_last_notified_at(
+                        db_session, schedule.id, current_datetime  # type: ignore
+                    )
+
+                    notifications_sent += 1
+
+                except Exception as e:
+                    logger.error(
+                        "Error processing requirement schedule",
+                        schedule_id=str(schedule.id) if schedule else None,
+                        error=str(e),
+                        exc_info=True,
+                    )
+                    continue
+
+            logger.info(
+                "Daily requirement notifier task completed",
+                processed_count=processed_count,
+                notifications_sent=notifications_sent,
+            )
+
             return {
                 "success": True,
-                "processed_count": 0,
-                "notifications_sent": 0,
+                "processed_count": processed_count,
+                "notifications_sent": notifications_sent,
                 "request_id": request_id,
             }
 
-        processed_count = 0
-        notifications_sent = 0
+        except Exception as e:
+            logger.error(
+                "Daily requirement notifier task exception",
+                request_id=request_id,
+                error=str(e),
+                exc_info=True,
+            )
 
-        for schedule in eligible_schedules:
-            try:
-                processed_count += 1
-
-                # Calculate days until/past deadline
-                days_until_deadline = (
-                    schedule.submission_deadline.date() - current_datetime.date()
-                ).days
-
-                days_until_grace_end = (
-                    schedule.grace_period_deadline.date() - current_datetime.date()
-                ).days
-
-                # Determine if notification should be sent based on timing rules
-                notification_decision = _should_send_notification(
-                    schedule,
-                    days_until_deadline,
-                    days_until_grace_end,
-                    current_datetime,
-                )
-
-                if not notification_decision["should_send"]:
-                    continue
-
-                # Get recipient student user IDs
-                recipient_ids = await get_student_user_ids_for_requirement_schedule(
-                    db_session, schedule.id
-                )
-
-                if not recipient_ids:
-                    continue
-
-                # Create notification
-                expires_at = current_datetime + timedelta(days=15)
-
-                create_notification_async(
-                    request_id=request_id,
-                    notification_code=notification_decision["notification_code"],
-                    entity_id=schedule.id,
-                    actor_type=ActorType.SYSTEM.value,
-                    recipient_ids=recipient_ids,
-                    actor_id=None,
-                    scheduled_for=None,
-                    expires_at=expires_at,
-                    in_app_enabled=True,
-                    line_app_enabled=True,
-                )
-
-                # Update last_notified_at
-                await _update_last_notified_at(
-                    db_session, schedule.id, current_datetime
-                )
-
-                notifications_sent += 1
-
-            except Exception as e:
-                logger.error(
-                    "Error processing requirement schedule",
-                    schedule_id=str(schedule.id) if schedule else None,
-                    error=str(e),
-                    exc_info=True,
-                )
-                continue
-
-        logger.info(
-            "Daily requirement notifier task completed",
-            processed_count=processed_count,
-            notifications_sent=notifications_sent,
-        )
-
-        return {
-            "success": True,
-            "processed_count": processed_count,
-            "notifications_sent": notifications_sent,
-            "request_id": request_id,
-        }
-
-    except Exception as e:
-        logger.error(
-            "Daily requirement notifier task exception",
-            request_id=request_id,
-            error=str(e),
-            exc_info=True,
-        )
-
-        if db_session:
-            await db_session.rollback()
-
-        # Retry with exponential backoff for transient errors
-        if self.request.retries < self.max_retries:
-            retry_delay = min(2**self.request.retries * 60, 600)  # Cap at 10 minutes
-            raise self.retry(countdown=retry_delay)
-
-        return {"success": False, "error": str(e), "request_id": request_id}
-    finally:
-        if db_session:
-            await db_session.close()
+            return {"success": False, "error": str(e), "request_id": request_id}
 
 
 async def _get_eligible_requirement_schedules(
-    db_session: AsyncSession, current_datetime: datetime
+    db_session: Session, current_datetime: datetime
 ) -> List[ProgramRequirementSchedule]:
     """
     Get requirement schedules that are eligible for notifications.
@@ -181,7 +168,7 @@ async def _get_eligible_requirement_schedules(
     1. start_notify_at >= current_date (notification period has started)
     2. grace_period_deadline + 7 days >= current_date (within notification window)
     """
-    result = await db_session.execute(
+    result = db_session.execute(
         select(ProgramRequirementSchedule)
         .options(
             selectinload(ProgramRequirementSchedule.program_requirement).selectinload(
@@ -286,12 +273,12 @@ def _should_send_notification(
 
 
 async def _update_last_notified_at(
-    db_session: AsyncSession, schedule_id: uuid.UUID, current_datetime: datetime
+    db_session: Session, schedule_id: uuid.UUID, current_datetime: datetime
 ):
     """Update the last_notified_at timestamp for a schedule."""
-    await db_session.execute(
+    db_session.execute(
         update(ProgramRequirementSchedule)
         .where(ProgramRequirementSchedule.id == schedule_id)
         .values(last_notified_at=current_datetime)
     )
-    await db_session.commit()
+    db_session.commit()

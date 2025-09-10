@@ -1,9 +1,9 @@
-from typing import Annotated, Optional
+from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 import uuid
 
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.services.notifications.user_notifications import UserNotificationService
 from app.middlewares.auth_middleware import get_current_user, AuthState
 from app.utils.responses import ResponseBuilder
@@ -19,7 +19,7 @@ logger = get_logger()
 async def get_unread_notifications(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
     limit: int = Query(
         default=50,
         ge=1,
@@ -86,7 +86,7 @@ async def mark_notification_as_read(
     request: Request,
     notification_id: str,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """
     Mark a specific notification as read.
@@ -155,7 +155,7 @@ async def mark_notification_as_read(
 async def mark_all_notifications_as_read(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """
     Mark all unread notifications as read for the current user.
@@ -207,7 +207,7 @@ async def mark_all_notifications_as_read(
 async def clear_all_notifications(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """
     Clear all notifications for the current user.
@@ -256,7 +256,7 @@ async def clear_all_notifications(
 async def get_unread_count(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_async_session)],
+    db: Annotated[Session, Depends(get_sync_session)],
 ):
     """
     Get the count of unread notifications for the current user.

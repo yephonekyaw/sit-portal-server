@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus
@@ -10,7 +10,7 @@ import jwt
 from jwcrypto import jwk
 from jwt.algorithms import RSAAlgorithm
 from sqlalchemy import select, and_, update
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 
 from app.config.settings import settings
 from app.db.models import LineChannelAccessToken
@@ -23,7 +23,7 @@ logger = get_logger()
 class LineChannelTokenService:
     """Service for managing LINE channel access tokens."""
 
-    def __init__(self, db_session: AsyncSession):
+    def __init__(self, db_session: Session):
         self.db = db_session
         self.key_file = Path(settings.LINE_SIGNING_KEY_PATH)
 
@@ -159,7 +159,7 @@ class LineChannelTokenService:
         expires_at = datetime.now() + timedelta(seconds=int(token_data["expires_in"]))
 
         # Deactivate all existing tokens first
-        await self.db.execute(
+        self.db.execute(
             update(LineChannelAccessToken)
             .values(is_active=False)
             .where(LineChannelAccessToken.is_active == True)
@@ -176,14 +176,14 @@ class LineChannelTokenService:
         )
 
         self.db.add(new_token)
-        await self.db.commit()
-        await self.db.refresh(new_token)
+        self.db.commit()
+        self.db.refresh(new_token)
 
         return new_token
 
     async def get_active_access_token(self) -> Optional[LineChannelAccessToken]:
         """Get the currently active access token."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(LineChannelAccessToken)
             .where(
                 and_(
@@ -201,7 +201,7 @@ class LineChannelTokenService:
         self, valid_kids: List[str]
     ) -> List[LineChannelAccessToken]:
         """Get expired tokens that match the provided key IDs."""
-        result = await self.db.execute(
+        result = self.db.execute(
             select(LineChannelAccessToken).where(
                 and_(
                     LineChannelAccessToken.key_id.in_(valid_kids),
@@ -214,7 +214,7 @@ class LineChannelTokenService:
 
     async def mark_token_as_revoked(self, key_id: str) -> bool:
         """Mark a token as revoked in the database."""
-        result = await self.db.execute(
+        result = self.db.execute(
             update(LineChannelAccessToken)
             .where(LineChannelAccessToken.key_id == key_id)
             .values(
@@ -223,7 +223,7 @@ class LineChannelTokenService:
                 revoked_at=datetime.now(),
             )
         )
-        await self.db.commit()
+        self.db.commit()
         return result.rowcount > 0
 
     async def generate_and_store_new_token(self) -> Optional[LineChannelAccessToken]:
@@ -239,7 +239,7 @@ class LineChannelTokenService:
         """Remove expired and revoked tokens that are safe to clean up."""
         cutoff_date = datetime.now() - timedelta(days=7)
 
-        result = await self.db.execute(
+        result = self.db.execute(
             select(LineChannelAccessToken).where(
                 and_(
                     LineChannelAccessToken.is_revoked == True,
@@ -250,9 +250,9 @@ class LineChannelTokenService:
         tokens_to_delete = list(result.scalars().all())
 
         for token in tokens_to_delete:
-            await self.db.delete(token)
+            self.db.delete(token)
 
-        await self.db.commit()
+        self.db.commit()
         return len(tokens_to_delete)
 
     async def get_messaging_access_token(self) -> Optional[str]:

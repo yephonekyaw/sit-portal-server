@@ -3,7 +3,7 @@ from typing import Optional, List, Dict, Any
 import uuid
 from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import Session
 from sqlalchemy import select, insert
 
 from app.db.models import (
@@ -23,7 +23,7 @@ logger = get_logger()
 class BaseNotificationService(ABC):
     """Simplified base notification service"""
 
-    def __init__(self, db_session: AsyncSession, notification_code: str):
+    def __init__(self, db_session: Session, notification_code: str):
         self.db = db_session
         self.notification_code = notification_code
         self._notification_type: Optional[NotificationType] = None
@@ -31,7 +31,7 @@ class BaseNotificationService(ABC):
     async def _get_notification_type(self) -> NotificationType:
         """Get notification type from database"""
         if self._notification_type is None:
-            result = await self.db.execute(
+            result = self.db.execute(
                 select(NotificationType).where(
                     NotificationType.code == self.notification_code
                 )
@@ -62,7 +62,7 @@ class BaseNotificationService(ABC):
             except ValueError:
                 channel_enum = ChannelType.IN_APP
 
-            template_result = await self.db.execute(
+            template_result = self.db.execute(
                 select(NotificationChannelTemplate).where(
                     NotificationChannelTemplate.notification_type_id
                     == notification_type.id,
@@ -128,7 +128,7 @@ class BaseNotificationService(ABC):
                 "expires_at": expires_at,
             }
 
-            result = await self.db.execute(
+            result = self.db.execute(
                 insert(Notification)
                 .values(**notification_data)
                 .returning(Notification.id)
@@ -149,18 +149,15 @@ class BaseNotificationService(ABC):
                 )
 
             if recipient_data:
-                await self.db.execute(
-                    insert(NotificationRecipient).values(recipient_data)
-                )
+                self.db.execute(insert(NotificationRecipient).values(recipient_data))
 
-            await self.db.commit()
+            self.db.commit()
 
             logger.info(
                 f"Created notification {notification_id} for {len(recipient_ids)} recipients"
             )
-            return notification_id
+            return notification_id  # type: ignore
 
         except Exception as e:
-            await self.db.rollback()
             logger.error(f"Failed to create notification: {e}", exc_info=True)
             raise

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 
+from app.services.staff.dashboard_stats_service import get_dashboard_stats_service
 from app.utils.logging import get_logger
 from app.db.models import (
     ProgramRequirement,
@@ -32,6 +33,7 @@ class ProgramRequirementScheduleService:
 
     def __init__(self, db_session: Session):
         self.db = db_session
+        self.dashboard_stats_service = get_dashboard_stats_service(db_session)
 
     async def get_schedule_by_id(
         self, schedule_id: uuid.UUID
@@ -214,6 +216,11 @@ class ProgramRequirementScheduleService:
             self.db.add(new_schedule)
             self.db.commit()
             self.db.refresh(new_schedule)
+
+            # Create corresponding dashboard stats record
+            await self.dashboard_stats_service.create_dashboard_stats_by_schedule_id(
+                schedule_id=new_schedule.id  # type: ignore
+            )
 
             logger.info(f"Created new program requirement schedule: {new_schedule.id}")
             return self._create_schedule_response(new_schedule)

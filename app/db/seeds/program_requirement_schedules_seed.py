@@ -1,9 +1,7 @@
 import uuid
-from datetime import datetime, timedelta, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
-from zoneinfo import ZoneInfo
 
 from app.db.models import (
     ProgramRequirementSchedule,

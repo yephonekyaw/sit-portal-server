@@ -1,14 +1,14 @@
-from typing import Optional
-from datetime import datetime, timezone
-import uuid
 import random
+import uuid
+import asyncio
+from typing import Optional
+from datetime import datetime
 
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session
 
 from app.celery import celery
-from app.db.session import get_async_session
+from app.db.session import get_sync_session
 from app.db.models import (
     NotificationRecipient,
     NotificationStatus,
@@ -21,7 +21,7 @@ from app.utils.logging import get_logger
 
 
 @celery.task(bind=True, max_retries=5, default_retry_delay=120)
-async def send_line_notification_task(
+def send_line_notification_task(
     self, request_id: str, notification_id: str, recipient_id: str
 ):
     """
@@ -35,182 +35,161 @@ async def send_line_notification_task(
         notification_id: UUID of the notification (as string)
         recipient_id: UUID of the recipient (as string)
     """
+    return asyncio.run(
+        _async_send_line_notification(request_id, notification_id, recipient_id)
+    )
+
+
+async def _async_send_line_notification(
+    request_id: str, notification_id: str, recipient_id: str
+):
     logger = get_logger().bind(request_id=request_id)
-    db_session: AsyncSession | None = None
 
-    try:
+    for db_session in get_sync_session():
+        try:
 
-        # Get async database session using context manager
-        async for db_session in get_async_session():
-            break
-
-        if not db_session:
-            logger.error("Failed to get database session")
-            return {
-                "success": False,
-                "error": "Failed to get database session",
-                "request_id": request_id,
-            }
-
-        # Get notification and recipient in a single optimized query
-        notification_result = await db_session.execute(
-            select(Notification, NotificationRecipient)
-            .join(
-                NotificationRecipient,
-                Notification.id == NotificationRecipient.notification_id,
-            )
-            .options(selectinload(Notification.notification_type))
-            .where(
-                and_(
-                    Notification.id == uuid.UUID(notification_id),
-                    NotificationRecipient.recipient_id == uuid.UUID(recipient_id),
+            # Get notification and recipient in a single optimized query
+            notification_result = db_session.execute(
+                select(Notification, NotificationRecipient)
+                .join(
+                    NotificationRecipient,
+                    Notification.id == NotificationRecipient.notification_id,
+                )
+                .options(selectinload(Notification.notification_type))
+                .where(
+                    and_(
+                        Notification.id == uuid.UUID(notification_id),
+                        NotificationRecipient.recipient_id == uuid.UUID(recipient_id),
+                    )
                 )
             )
-        )
-        result_row = notification_result.first()
-        if not result_row:
-            logger.error(
-                f"Notification or recipient not found: {notification_id}, {recipient_id}"
+            result_row = notification_result.first()
+            if not result_row:
+                logger.error(
+                    f"Notification or recipient not found: {notification_id}, {recipient_id}"
+                )
+                return {
+                    "success": False,
+                    "error": "Notification or recipient not found",
+                    "request_id": request_id,
+                }
+
+            notification, recipient = result_row
+
+            # Get formatted message content using NotificationServiceRegistry directly
+            service = NotificationServiceRegistry.create_service(
+                notification.notification_type.code, db_session
             )
-            return {
-                "success": False,
-                "error": "Notification or recipient not found",
-                "request_id": request_id,
-            }
 
-        notification, recipient = result_row
+            if not service:
+                logger.error(
+                    f"No service found for notification code: {notification.notification_type.code}"
+                )
+                recipient.status = NotificationStatus.FAILED
+                db_session.commit()
+                return {
+                    "success": False,
+                    "error": f"No service found for notification code: {notification.notification_type.code}",
+                    "request_id": request_id,
+                }
 
-        # Get formatted message content using NotificationServiceRegistry directly
-        service = NotificationServiceRegistry.create_service(
-            notification.notification_type.code, db_session
-        )
+            try:
+                notification_data = await service.get_notification_data(
+                    notification.entity_id, uuid.UUID(notification_id)
+                )
+                message = await service.construct_message("line_app", notification_data)
+            except Exception as e:
+                logger.error(
+                    f"Failed to get notification data or construct message for {notification_id}: {str(e)}"
+                )
+                message = None
 
-        if not service:
-            logger.error(
-                f"No service found for notification code: {notification.notification_type.code}"
+            if not message:
+                logger.error(
+                    f"Failed to get notification message content for {notification_id}"
+                )
+                recipient.status = NotificationStatus.FAILED
+                db_session.commit()
+                return {
+                    "success": False,
+                    "error": "Failed to get message content",
+                    "request_id": request_id,
+                }
+
+            # Validate recipient can receive LINE notifications
+            if not await _validate_line_recipient(db_session, uuid.UUID(recipient_id)):
+                logger.warning(
+                    f"Recipient not configured for LINE notifications: {recipient_id}"
+                )
+                recipient.status = NotificationStatus.FAILED
+                db_session.commit()
+                return {
+                    "success": False,
+                    "error": "Recipient not configured for LINE notifications",
+                    "request_id": request_id,
+                }
+
+            # Get recipient's LINE user ID
+            line_user_id = await _get_line_user_id(db_session, uuid.UUID(recipient_id))
+            if not line_user_id:
+                logger.error(f"Recipient LINE user ID not found: {recipient_id}")
+                recipient.status = NotificationStatus.FAILED
+                db_session.commit()
+                return {
+                    "success": False,
+                    "error": "Recipient LINE user ID not found",
+                    "request_id": request_id,
+                }
+
+            # MOCK: Simulate LINE API call
+            mock_line_success = await _mock_send_line_message(
+                line_user_id=line_user_id,
+                subject=message.get("subject", "Notification"),
+                body=message.get("body", "You have a notification"),
+                logger=logger,
             )
-            recipient.status = NotificationStatus.FAILED
-            await db_session.commit()
-            return {
-                "success": False,
-                "error": f"No service found for notification code: {notification.notification_type.code}",
-                "request_id": request_id,
-            }
 
-        try:
-            notification_data = await service.get_notification_data(
-                notification.entity_id, uuid.UUID(notification_id)
-            )
-            message = await service.construct_message("line_app", notification_data)
+            if mock_line_success:
+                # Update recipient status
+                recipient.status = NotificationStatus.DELIVERED
+                recipient.line_app_sent_at = datetime.now()
+                recipient.delivered_at = datetime.now()
+                db_session.commit()
+
+                return {
+                    "success": True,
+                    "channel": "line_app",
+                    "notification_id": notification_id,
+                    "recipient_id": recipient_id,
+                    "request_id": request_id,
+                }
+            else:
+                # Mark as failed and retry
+                recipient.status = NotificationStatus.FAILED
+                db_session.commit()
+
+                return {
+                    "success": False,
+                    "error": "Failed to send LINE notification after all retries",
+                    "request_id": request_id,
+                }
+
         except Exception as e:
             logger.error(
-                f"Failed to get notification data or construct message for {notification_id}: {str(e)}"
+                f"LINE notification sending task exception for {notification_id}/{recipient_id}: {str(e)}"
             )
-            message = None
 
-        if not message:
-            logger.error(
-                f"Failed to get notification message content for {notification_id}"
-            )
-            recipient.status = NotificationStatus.FAILED
-            await db_session.commit()
             return {
                 "success": False,
-                "error": "Failed to get message content",
-                "request_id": request_id,
-            }
-
-        # Validate recipient can receive LINE notifications
-        if not await _validate_line_recipient(db_session, uuid.UUID(recipient_id)):
-            logger.warning(
-                f"Recipient not configured for LINE notifications: {recipient_id}"
-            )
-            recipient.status = NotificationStatus.FAILED
-            await db_session.commit()
-            return {
-                "success": False,
-                "error": "Recipient not configured for LINE notifications",
-                "request_id": request_id,
-            }
-
-        # Get recipient's LINE user ID
-        line_user_id = await _get_line_user_id(db_session, uuid.UUID(recipient_id))
-        if not line_user_id:
-            logger.error(f"Recipient LINE user ID not found: {recipient_id}")
-            recipient.status = NotificationStatus.FAILED
-            await db_session.commit()
-            return {
-                "success": False,
-                "error": "Recipient LINE user ID not found",
-                "request_id": request_id,
-            }
-
-        # MOCK: Simulate LINE API call
-        mock_line_success = await _mock_send_line_message(
-            line_user_id=line_user_id,
-            subject=message.get("subject", "Notification"),
-            body=message.get("body", "You have a notification"),
-            logger=logger,
-        )
-
-        if mock_line_success:
-            # Update recipient status
-            recipient.status = NotificationStatus.DELIVERED
-            recipient.line_app_sent_at = datetime.now()
-            recipient.delivered_at = datetime.now()
-            await db_session.commit()
-
-            return {
-                "success": True,
-                "channel": "line_app",
+                "error": str(e),
                 "notification_id": notification_id,
                 "recipient_id": recipient_id,
                 "request_id": request_id,
             }
-        else:
-            # Mark as failed and retry
-            recipient.status = NotificationStatus.FAILED
-            await db_session.commit()
-
-            if self.request.retries < self.max_retries:
-                # Cap retry delay at 10 minutes
-                retry_delay = min(2**self.request.retries * 120, 600)
-                raise self.retry(countdown=retry_delay)
-
-            return {
-                "success": False,
-                "error": "Failed to send LINE notification after all retries",
-                "request_id": request_id,
-            }
-
-    except Exception as e:
-        logger.error(
-            f"LINE notification sending task exception for {notification_id}/{recipient_id}: {str(e)}"
-        )
-
-        if db_session:
-            await db_session.rollback()
-
-        # Retry for transient errors
-        if self.request.retries < self.max_retries:
-            # Cap retry delay at 10 minutes
-            retry_delay = min(2**self.request.retries * 120, 600)
-            raise self.retry(countdown=retry_delay)
-
-        return {
-            "success": False,
-            "error": str(e),
-            "notification_id": notification_id,
-            "recipient_id": recipient_id,
-            "request_id": request_id,
-        }
-    finally:
-        if db_session:
-            await db_session.close()
 
 
 async def _validate_line_recipient(
-    db_session: AsyncSession, recipient_id: uuid.UUID
+    db_session: Session, recipient_id: uuid.UUID
 ) -> bool:
     """
     Validate that recipient has LINE configured.
@@ -218,7 +197,7 @@ async def _validate_line_recipient(
     Checks if the user is a student and has a line_application_id set.
     """
     try:
-        result = await db_session.execute(
+        result = db_session.execute(
             select(Student).join(User).where(User.id == recipient_id)
         )
         student = result.scalar_one_or_none()
@@ -236,11 +215,11 @@ async def _validate_line_recipient(
 
 
 async def _get_line_user_id(
-    db_session: AsyncSession, recipient_id: uuid.UUID
+    db_session: Session, recipient_id: uuid.UUID
 ) -> Optional[str]:
     """Get the recipient's LINE user ID"""
     try:
-        result = await db_session.execute(
+        result = db_session.execute(
             select(Student.line_application_id)
             .join(User)
             .where(User.id == recipient_id)

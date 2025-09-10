@@ -1,10 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, cast
 from datetime import datetime
 import uuid
 
 from sqlalchemy import and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import selectinload, Session
 from sqlalchemy.future import select
 
 from app.db.models import (
@@ -24,7 +23,7 @@ logger = get_logger()
 
 
 async def get_student_user_ids_for_requirement_schedule(
-    db: AsyncSession, requirement_schedule_id: uuid.UUID
+    db: Session, requirement_schedule_id: uuid.UUID
 ) -> List[uuid.UUID]:
     """
     Get user IDs of students who haven't submitted or whose submissions
@@ -45,7 +44,7 @@ async def get_student_user_ids_for_requirement_schedule(
             .options(selectinload(ProgramRequirementSchedule.program_requirement))
         )
 
-        result = await db.execute(requirement_schedule_stmt)
+        result = db.execute(requirement_schedule_stmt)
         requirement_schedule = result.scalar_one_or_none()
 
         if not requirement_schedule:
@@ -69,7 +68,7 @@ async def get_student_user_ids_for_requirement_schedule(
             .options(selectinload(Student.user))
         )
 
-        students_result = await db.execute(students_stmt)
+        students_result = db.execute(students_stmt)
         all_students = students_result.scalars().all()
 
         # Get students who have approved submissions for this requirement schedule
@@ -81,7 +80,7 @@ async def get_student_user_ids_for_requirement_schedule(
             )
         )
 
-        approved_result = await db.execute(approved_submissions_stmt)
+        approved_result = db.execute(approved_submissions_stmt)
         approved_student_ids = {row[0] for row in approved_result.fetchall()}
 
         # Filter out students who already have approved submissions
@@ -105,7 +104,7 @@ async def get_student_user_ids_for_requirement_schedule(
 
 
 async def get_staff_user_ids_by_program_and_role(
-    db: AsyncSession, program_code: str, role_name: Optional[str] = None
+    db: Session, program_code: str, role_name: Optional[str] = None
 ) -> List[uuid.UUID]:
     """
     Get user IDs of staff members responsible for a particular program
@@ -142,7 +141,7 @@ async def get_staff_user_ids_by_program_and_role(
                 Role.name == role_name
             )
 
-        result = await db.execute(query)
+        result = db.execute(query)
         staff_members = result.scalars().unique().all()
 
         staff_user_ids = [staff.user_id for staff in staff_members]
@@ -152,7 +151,7 @@ async def get_staff_user_ids_by_program_and_role(
             + (f" with role {role_name}" if role_name else "")
         )
 
-        return staff_user_ids
+        return cast(List[uuid.UUID], staff_user_ids)
 
     except Exception as e:
         logger.error(
@@ -163,7 +162,7 @@ async def get_staff_user_ids_by_program_and_role(
 
 
 async def get_user_id_from_student_identifier(
-    db: AsyncSession, identifier: str
+    db: Session, identifier: str
 ) -> Optional[uuid.UUID]:
     """
     Get user_id from student identifier (student ID, student_id, or sit_email).
@@ -180,10 +179,10 @@ async def get_user_id_from_student_identifier(
         try:
             student_uuid = uuid.UUID(identifier)
             stmt = select(Student.user_id).where(Student.id == student_uuid)
-            result = await db.execute(stmt)
+            result = db.execute(stmt)
             user_id = result.scalar_one_or_none()
             if user_id:
-                return user_id
+                return cast(uuid.UUID, user_id)
         except ValueError:
             pass
 
@@ -192,7 +191,7 @@ async def get_user_id_from_student_identifier(
             or_(Student.student_id == identifier, Student.sit_email == identifier)
         )
 
-        result = await db.execute(stmt)
+        result = db.execute(stmt)
         user_id = result.scalar_one_or_none()
 
         if user_id:
@@ -200,7 +199,7 @@ async def get_user_id_from_student_identifier(
         else:
             logger.warning(f"No student found for identifier {identifier}")
 
-        return user_id
+        return cast(uuid.UUID, user_id)
 
     except Exception as e:
         logger.error(
@@ -211,7 +210,7 @@ async def get_user_id_from_student_identifier(
 
 
 async def get_user_id_from_staff_identifier(
-    db: AsyncSession, identifier: str
+    db: Session, identifier: str
 ) -> Optional[uuid.UUID]:
     """
     Get user_id from staff identifier (staff ID or employee_id).
@@ -228,16 +227,16 @@ async def get_user_id_from_staff_identifier(
         try:
             staff_uuid = uuid.UUID(identifier)
             stmt = select(Staff.user_id).where(Staff.id == staff_uuid)
-            result = await db.execute(stmt)
+            result = db.execute(stmt)
             user_id = result.scalar_one_or_none()
             if user_id:
-                return user_id
+                return cast(uuid.UUID, user_id)
         except ValueError:
             pass
 
         # Try as employee_id
         stmt = select(Staff.user_id).where(Staff.employee_id == identifier)
-        result = await db.execute(stmt)
+        result = db.execute(stmt)
         user_id = result.scalar_one_or_none()
 
         if user_id:
@@ -245,7 +244,7 @@ async def get_user_id_from_staff_identifier(
         else:
             logger.warning(f"No staff found for identifier {identifier}")
 
-        return user_id
+        return cast(uuid.UUID, user_id)
 
     except Exception as e:
         logger.error(
@@ -267,7 +266,7 @@ def create_notification_async(
     in_app_enabled: bool = True,
     line_app_enabled: bool = False,
     **metadata,
-) -> str:
+) -> None:
     """
     Create notification asynchronously via Celery task.
 
@@ -307,17 +306,7 @@ def create_notification_async(
         }
 
         # Use Celery task for async processing
-        result = create_notification_task.delay(**task_args)
-
-        logger.info(
-            "Notification creation task triggered",
-            task_id=result.id,
-            notification_code=notification_code,
-            entity_id=str(entity_id),
-            recipient_count=len(recipient_ids),
-        )
-
-        return result.id
+        create_notification_task.delay(**task_args)
 
     except Exception as e:
         logger.error(

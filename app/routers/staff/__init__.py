@@ -6,6 +6,7 @@ from .certificates import certificates_router
 from .program_requirements import program_requirements_router
 from .program_requirement_schedules import program_requirement_schedules_router
 from .academic_years import academic_years_router
+from .dashboard_stats import dashboard_stats_router
 
 staff_router = APIRouter()
 
@@ -33,4 +34,9 @@ staff_router.include_router(
     academic_years_router,
     prefix="/academic-years",
     tags=["Staff - Academic Years Management"],
+)
+staff_router.include_router(
+    dashboard_stats_router,
+    prefix="/dashboard-stats",
+    tags=["Staff - Dashboard Statistics Management"],
 )
