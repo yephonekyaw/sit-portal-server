@@ -3,9 +3,14 @@ import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
+from app.db.session import get_sync_session
 from app.services.staff.submission_service import (
     SubmissionService,
     get_submission_service,
+)
+from app.services.staff.dashboard_stats_service import (
+    DashboardStatsService,
+    get_dashboard_stats_service,
 )
 from app.schemas.staff.submission_schemas import (
     GetListOfSubmissions,
@@ -16,7 +21,11 @@ from app.schemas.staff.submission_schemas import (
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
 from app.utils.error_handlers import handle_service_error
-from app.middlewares.auth_middleware import require_staff
+from app.middlewares.auth_middleware import AuthState, require_staff
+from app.services.notifications.utils import (
+    create_notification_sync,
+    get_user_id_from_student_identifier,
+)
 
 submissions_router = APIRouter(dependencies=[Depends(require_staff)])
 
@@ -130,6 +139,10 @@ async def verify_submission(
     submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
     verification_data: ManualVerificationRequestBody,
     submission_service: SubmissionService = Depends(get_submission_service),
+    dashboard_stats_service: DashboardStatsService = Depends(
+        get_dashboard_stats_service
+    ),
+    current_user: AuthState = Depends(require_staff),
 ):
     """Perform manual verification of a certificate submission"""
     try:
@@ -138,15 +151,67 @@ async def verify_submission(
             raise ValueError("SUBMISSION_ID_MISMATCH")
 
         # Get verifier ID from auth context
-        verifier_id = (
-            request.state.auth.user_id if hasattr(request.state, "auth") else None
-        )
+        verifier_id = current_user.user_id
 
         # Create manual verification
         verification_result = await submission_service.create_manual_verification(
             verification_data=verification_data,
             verifier_id=str(verifier_id),
         )
+
+        # Update dashboard stats based on verification result
+        status_deltas = {
+            "approved": {
+                "approved_count_delta": 1,
+                "manual_review_count_delta": -1,
+                "manual_verification_count_delta": 1,
+            },
+            "rejected": {
+                "rejected_count_delta": 1,
+                "manual_review_count_delta": -1,
+            },
+        }
+
+        deltas = status_deltas.get(verification_data.status, {})
+
+        await dashboard_stats_service.update_dashboard_stats_by_schedule(
+            requirement_schedule_id=str(verification_data.schedule_id), **deltas
+        )
+
+        # Create notification for student about verification result
+        submission = await submission_service.get_submission_by_id(
+            submission_id=str(submission_id)
+        )
+
+        for db_session in get_sync_session():
+            student_user_id = await get_user_id_from_student_identifier(
+                db_session, submission.student_id
+            )
+
+            if not student_user_id:
+                raise ValueError("STUDENT_USER_NOT_FOUND")
+
+            create_notification_sync(
+                request_id=str(request.state.request_id),
+                notification_code=(
+                    "certificate_submission_verify"
+                    if verification_data.status == "approved"
+                    else "certificate_submission_reject"
+                ),
+                entity_id=submission.id,  # type: ignore
+                actor_type="user",
+                recipient_ids=[student_user_id],
+                actor_id=(
+                    verifier_id
+                    if isinstance(verifier_id, uuid.UUID)
+                    else uuid.UUID(verifier_id)
+                ),
+                scheduled_for=None,
+                expires_at=None,
+                in_app_enabled=True,
+                line_app_enabled=True,
+                metadata={"verifier_name": current_user.username},
+            )
 
         return ResponseBuilder.success(
             request=request,

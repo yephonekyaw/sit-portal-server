@@ -80,7 +80,7 @@ class ProgramRequirementScheduleNotificationService(BaseNotificationService):
     ) -> Dict[str, Any]:
         """Get program requirement schedule data for all notification types"""
         try:
-            result = await self.db.execute(
+            result = self.db.execute(
                 select(ProgramRequirementSchedule)
                 .options(
                     selectinload(

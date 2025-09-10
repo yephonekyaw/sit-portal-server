@@ -1,5 +1,6 @@
-from typing import Dict, Any
 import uuid
+import json
+from typing import Dict, Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -26,7 +27,7 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
     ) -> Dict[str, Any]:
         """Get certificate submission data for all notification types"""
         try:
-            result = await self.db.execute(
+            result = self.db.execute(
                 select(CertificateSubmission)
                 .options(
                     selectinload(CertificateSubmission.student).selectinload(
@@ -48,14 +49,14 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
             notification_metadata = {}
             if notification_id:
                 try:
-                    notification_result = await self.db.execute(
+                    notification_result = self.db.execute(
                         select(Notification.notification_metadata).where(
                             Notification.id == notification_id
                         )
                     )
                     metadata = notification_result.scalar_one_or_none()
                     if metadata:
-                        notification_metadata = metadata
+                        notification_metadata = json.loads(metadata)
                 except Exception as e:
                     logger.warning(
                         f"Could not fetch notification metadata for {notification_id}: {e}"

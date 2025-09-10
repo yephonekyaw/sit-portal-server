@@ -47,27 +47,23 @@ beat_schedule = {
         "task": "app.tasks.daily_scheduled_processor.daily_scheduled_notifications_processor_task",
         "schedule": crontab(hour=9, minute=0),
         "args": ("daily_scheduled_processor_cron",),
-        "options": {"queue": "notifications"},
     },
     "daily-requirement-schedule-notifier": {
         "task": "app.tasks.daily_requirement_schedule_notifier.daily_requirement_notifier_task",
         "schedule": crontab(hour=9, minute=0),
         "args": ("daily_requirement_schedule_notifier_cron",),
-        "options": {"queue": "notifications"},
     },
     # Daily maintenance tasks - Run at midnight Bangkok time
     "daily-notification-expiration": {
         "task": "app.tasks.daily_notification_expiration.daily_notification_expiration_task",
         "schedule": crontab(hour=0, minute=5),
         "args": ("daily_expiration_cron",),
-        "options": {"queue": "notifications"},
     },
     # Monthly schedule management - 1st of every month at midnight Bangkok time
     "monthly-schedule-creator": {
         "task": "app.tasks.monthly_schedule_creator.monthly_schedule_creator_task",
         "schedule": crontab(hour=0, minute=0, day_of_month=1),
         "args": ("monthly_schedule_creator_cron",),
-        "options": {"queue": "schedules"},
     },
     # Annual maintenance - Second Monday of August at 2:00 AM Bangkok time
     "annual-requirement-archiver": {
@@ -76,14 +72,12 @@ beat_schedule = {
             hour=2, minute=0, day_of_week=1, month_of_year=8, day_of_month="8-14"
         ),
         "args": ("annual_requirement_archiver_cron",),
-        "options": {"queue": "schedules"},
     },
     # LINE API management - Every 15 days at 3:00 AM Bangkok time
     "line-token-manager": {
         "task": "app.tasks.line_token_manager.line_token_manager_task",
         "schedule": crontab(hour=3, minute=0, day_of_month="*/15"),
         "args": ("line_token_manager_cron",),
-        "options": {"queue": "line_api"},
     },
 }
 

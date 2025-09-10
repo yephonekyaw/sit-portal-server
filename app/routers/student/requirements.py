@@ -1,4 +1,5 @@
-from typing import List, Annotated
+from typing import List, Annotated, cast
+import uuid
 
 from fastapi import APIRouter, Depends, Request, Form, Path, status
 from sqlalchemy.orm import Session
@@ -17,11 +18,19 @@ from app.services.staff.submission_service import (
     get_submission_service,
     SubmissionService,
 )
+from app.services.staff.dashboard_stats_service import (
+    DashboardStatsService,
+    get_dashboard_stats_service,
+)
 from app.utils.logging import get_logger
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
 from app.tasks.citi_cert_verification_task import verify_certificate_task
 from app.middlewares.auth_middleware import require_student, AuthState
+from app.services.notifications.utils import (
+    get_staff_user_ids_by_program_and_role,
+    create_notification_sync,
+)
 
 logger = get_logger()
 requirement_router = APIRouter()
@@ -36,6 +45,9 @@ async def submit_student_certificate(
     current_user: AuthState = Depends(require_student),
     minio_service: MinIOService = Depends(get_minio_service),
     db_session: Session = Depends(get_sync_session),
+    dashboard_stats_service: DashboardStatsService = Depends(
+        get_dashboard_stats_service
+    ),
 ):
     try:
         requirements_service = RequirementsService(db_session, minio_service)
@@ -50,8 +62,56 @@ async def submit_student_certificate(
             student=student, submission_data=submission_data
         )
 
+        # Update dashboard stats
+        timing_deltas = {
+            "on_time": {
+                "submitted_count_delta": 1,
+                "not_submitted_count_delta": -1,
+                "on_time_submissions_delta": 1,
+                "pending_count_delta": 1,
+            },
+            "late": {
+                "submitted_count_delta": 1,
+                "not_submitted_count_delta": -1,
+                "late_submissions_delta": 1,
+                "pending_count_delta": 1,
+            },
+            "overdue": {
+                "submitted_count_delta": 1,
+                "not_submitted_count_delta": -1,
+                "overdue_count_delta": 1,
+                "pending_count_delta": 1,
+            },
+        }
+
+        deltas = timing_deltas.get(cast(str, submission_response.submission_timing), {})
+
+        await dashboard_stats_service.update_dashboard_stats_by_schedule(
+            requirement_schedule_id=submission_response.schedule_id, **deltas
+        )
+
+        # Create notifications for staff
+        staff_user_ids = await get_staff_user_ids_by_program_and_role(
+            db_session,
+            program_code=submission_response.program_code,
+            role_name="admin",
+        )
+
+        create_notification_sync(
+            request_id=str(request.state.request_id),
+            notification_code="certificate_submission_submit",
+            entity_id=uuid.UUID(submission_response.submission_id),
+            actor_type="user",
+            recipient_ids=staff_user_ids,
+            actor_id=uuid.UUID(current_user.user_id),
+            scheduled_for=None,
+            expires_at=None,
+            in_app_enabled=True,
+            line_app_enabled=False,
+        )
+
         # Call celery verification task
-        verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
+        # verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
 
         return ResponseBuilder.success(
             request=request,

@@ -15,7 +15,7 @@ from app.db.models import (
 )
 from app.services.notifications.utils import (
     get_student_user_ids_for_requirement_schedule,
-    create_notification_async,
+    create_notification_sync,
 )
 from app.utils.logging import get_logger
 
@@ -105,7 +105,7 @@ async def _async_daily_requirement_notifier(request_id: str):
                     # Create notification
                     expires_at = current_datetime + timedelta(days=15)
 
-                    create_notification_async(
+                    create_notification_sync(
                         request_id=request_id,
                         notification_code=notification_decision["notification_code"],
                         entity_id=schedule.id,  # type: ignore

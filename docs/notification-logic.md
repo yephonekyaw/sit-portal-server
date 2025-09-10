@@ -26,7 +26,7 @@ line_notification_sender.py (Celery Task)
 
 ```
 notifications/
-├── utils.py              # Entry point - create_notification_async()
+├── utils.py              # Entry point - create_notification_sync()
 ├── base.py               # Base service class
 ├── certificate_service.py # Certificate notification logic
 ├── schedule_service.py    # Schedule notification logic
@@ -46,10 +46,10 @@ tasks/
 ### 1. Entry Point (utils.py)
 
 ```python
-from app.services.notifications.utils import create_notification_async
+from app.services.notifications.utils import create_notification_sync
 
 # Trigger async notification
-task_id = create_notification_async(
+task_id = create_notification_sync(
     request_id="req-123",
     notification_code="certificate_submission_submit",
     entity_id=submission_id,
@@ -126,7 +126,7 @@ Body: Dear {student_name}, your {certificate_name} has been {status}.
 
 **Data Sources:**
 1. Entity data (from certificate_service.py)
-2. Custom metadata (passed in create_notification_async)
+2. Custom metadata (passed in create_notification_sync)
 3. Default values
 
 ## Performance Optimizations
@@ -152,10 +152,10 @@ Body: Dear {student_name}, your {certificate_name} has been {status}.
 
 ### Basic Usage
 ```python
-from app.services.notifications.utils import create_notification_async
+from app.services.notifications.utils import create_notification_sync
 
 # Simple notification
-task_id = create_notification_async(
+task_id = create_notification_sync(
     request_id="req-123",
     notification_code="certificate_submission_submit",
     entity_id=submission_id,
@@ -167,7 +167,7 @@ task_id = create_notification_async(
 ### With Custom Metadata
 ```python
 # Notification with custom data for templates
-task_id = create_notification_async(
+task_id = create_notification_sync(
     request_id="req-456", 
     notification_code="certificate_submission_verify",
     entity_id=submission_id,
@@ -186,7 +186,7 @@ from datetime import datetime, timedelta
 
 # Schedule for later
 future_time = datetime.now() + timedelta(hours=2)
-task_id = create_notification_async(
+task_id = create_notification_sync(
     request_id="req-789",
     notification_code="program_requirement_warn", 
     entity_id=schedule_id,

@@ -254,7 +254,7 @@ async def get_user_id_from_staff_identifier(
         return None
 
 
-def create_notification_async(
+def create_notification_sync(
     request_id: str,
     notification_code: str,
     entity_id: uuid.UUID,

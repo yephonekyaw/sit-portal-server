@@ -34,6 +34,7 @@ def seed_all_data():
     1. Independent tables first (programs, academic_years, certificate_types, etc.)
     2. Tables that depend on others (users_students, permissions, etc.)
     3. Junction/relationship tables last (staff_permissions, etc.)
+    4. Complex tables that depend on multiple others (dashboard_stats, etc.)
     """
 
     db_session = SessionLocal()
@@ -50,24 +51,20 @@ def seed_all_data():
 
         # Phase 2: Tables with single dependencies
         logger.info("Phase 2: Seeding dependent tables...")
-        seed_program_requirements(db_session)  # Depends on programs + certificate_types
-        seed_program_requirement_schedules(
-            db_session
-        )  # Depends on program_requirements + academic_years
+        seed_program_requirements(db_session)
+        # seed_program_requirement_schedules(db_session)
         seed_notification_channel_templates(db_session)
-        seed_permissions(db_session)  # Depends on programs + roles
-        seed_users_students(db_session)  # Depends on programs + academic_years
-        seed_users_staff(db_session)  # Creates staff users
+        seed_permissions(db_session)
+        seed_users_students(db_session)
+        seed_users_staff(db_session)
 
         # Phase 3: Junction/relationship tables
         logger.info("Phase 3: Seeding relationship tables...")
-        seed_staff_permissions(db_session)  # Depends on staff + permissions
+        seed_staff_permissions(db_session)
 
         # Phase 4: Tables that depend on multiple others
         logger.info("Phase 4: Seeding complex dependent tables...")
-        seed_dashboard_stats(
-            db_session
-        )  # Depends on program_requirement_schedules, programs, certificate_types + academic_years
+        # seed_dashboard_stats(db_session)
 
         logger.info("Database seeding completed successfully!")
         return True
