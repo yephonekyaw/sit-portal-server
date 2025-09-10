@@ -111,7 +111,7 @@ async def submit_student_certificate(
         )
 
         # Call celery verification task
-        # verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
+        verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
 
         return ResponseBuilder.success(
             request=request,

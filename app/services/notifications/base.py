@@ -124,7 +124,7 @@ class BaseNotificationService(ABC):
                 "actor_type": ActorType(actor_type),
                 "actor_id": actor_id,
                 "priority": notification_type.default_priority,
-                "notification_metadata": json.dumps(metadata) if metadata else {},
+                "notification_metadata": json.dumps(metadata) if metadata else "",
                 "scheduled_for": scheduled_for,
                 "expires_at": expires_at,
             }
