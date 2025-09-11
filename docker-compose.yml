@@ -1,0 +1,85 @@
+name: "sit-portal"
+
+services:
+  redis:
+    image: redis:8.2.1-alpine
+    container_name: sit-portal-redis
+    restart: unless-stopped
+    ports:
+      - 6379:6379
+    command: redis-server --requirepass jubi-miyazaki-homonochi --appendonly yes
+    volumes:
+      - sit_portal_volume:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "jubi-miyazaki-homonochi", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - sit-portal-network
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.fastapi
+    container_name: sit-portal-api
+    restart: unless-stopped
+    ports:
+      - 8000:8000
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/v1/shared/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - sit-portal-network
+
+  celery-worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    container_name: sit-portal-worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - sit-portal-network
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    container_name: sit-portal-beat
+    restart: unless-stopped
+    command: celery -A app.celery beat --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - sit-portal-network
+
+volumes:
+  sit_portal_volume:
+    driver: local
+networks:
+  sit-portal-network:
+    driver: bridge

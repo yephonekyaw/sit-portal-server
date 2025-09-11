@@ -56,8 +56,6 @@ class Settings(BaseSettings):
     REDIS_HOST: str = "localhost"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    CELERY_BROKER_URL: str = "redis://:your-redis-password@localhost:6379/0"
-    CELERY_RESULT_BACKEND: str = "redis://:your-redis-password@localhost:6379/0"
 
     # Line Messaging API
     LINE_SIGNING_KEY_PATH: str = "<path-to-your-line-signing-key-json>"

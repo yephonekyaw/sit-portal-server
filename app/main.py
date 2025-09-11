@@ -60,12 +60,6 @@ def create_application() -> FastAPI:
 app = create_application()
 
 
-@app.get("/health", tags=["Health"])
-async def health_check():
-    """Health check endpoint to verify if the server is running."""
-    return {"status": "ok", "message": "SIT Portal is running!"}
-
-
 if __name__ == "__main__":
     import uvicorn
 
