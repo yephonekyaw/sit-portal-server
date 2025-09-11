@@ -27,7 +27,6 @@ def seed_notification_channel_templates(db_session: Session):
     templates = []
 
     # Copy the same template logic but with str(uuid.uuid4()) instead of uuid.uuid4()
-    # CertificateSubmission actions
     if "certificate_submission_submit" in notification_types:
         nt_id = notification_types["certificate_submission_submit"].id
         templates.extend(

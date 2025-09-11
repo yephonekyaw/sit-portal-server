@@ -21,8 +21,6 @@ from app.middlewares.auth_middleware import require_staff
 program_requirements_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
-
-
 # API Endpoints
 @program_requirements_router.get(
     "/",
@@ -158,7 +156,6 @@ async def update_program_requirement(
     except (ValueError, RuntimeError) as e:
         return handle_service_error(request, e)
     except Exception as e:
-        print(e)
         raise BusinessLogicError(
             message="Failed to update program requirement",
             error_code="PROGRAM_REQUIREMENT_UPDATE_FAILED",

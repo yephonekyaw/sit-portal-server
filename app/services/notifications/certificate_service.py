@@ -66,7 +66,7 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
                 "submission_id": str(submission.id),
                 "certificate_name": submission.certificate_type.cert_name,
                 "student_name": f"{submission.student.user.first_name} {submission.student.user.last_name}",
-                "student_id": submission.student.student_id,
+                "student_roll_number": submission.student.user_id,
                 "program_name": (
                     submission.requirement_schedule.program_requirement.program.program_name
                     if submission.requirement_schedule

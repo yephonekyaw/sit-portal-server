@@ -1,14 +1,14 @@
+import uuid
 from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.orm import Session
-import uuid
+from pydantic import ValidationError
 
 from app.db.session import get_sync_session
-from app.services.notifications.user_notifications import UserNotificationService
+from app.services.notifications.user_notification_service import UserNotificationService
 from app.middlewares.auth_middleware import get_current_user, AuthState
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import NotFoundError
-from pydantic import ValidationError
 from app.utils.logging import get_logger
 
 notifications_router = APIRouter()
@@ -57,15 +57,17 @@ async def get_unread_notifications(
         # Get total unread count for pagination info
         unread_count = await service.get_unread_count(user_uuid)
 
+        dumped_data = {
+            "notifications": notifications,
+            "unreadCount": unread_count,
+            "limit": limit,
+            "offset": offset,
+            "hasMore": len(notifications) == limit,
+        }
+
         return ResponseBuilder.success(
             request=request,
-            data={
-                "notifications": notifications,
-                "total_unread": unread_count,
-                "limit": limit,
-                "offset": offset,
-                "has_more": len(notifications) == limit,
-            },
+            data=dumped_data,
             message=f"Retrieved {len(notifications)} unread notifications",
         )
 
@@ -135,7 +137,7 @@ async def mark_notification_as_read(
 
         return ResponseBuilder.success(
             request=request,
-            data={"unread_count": unread_count},
+            data={"unreadCount": unread_count},
             message="Notification marked as read",
         )
 
@@ -182,7 +184,7 @@ async def mark_all_notifications_as_read(
 
         return ResponseBuilder.success(
             request=request,
-            data={"marked_as_read": updated_count},
+            data={"allAsReadCount": updated_count},
             message=f"Marked {updated_count} notifications as read",
         )
 
@@ -236,7 +238,7 @@ async def clear_all_notifications(
 
         return ResponseBuilder.success(
             request=request,
-            data={"cleared_count": cleared_count},
+            data={"clearedCount": cleared_count},
             message=f"Cleared {cleared_count} notifications",
         )
 
@@ -283,7 +285,7 @@ async def get_unread_count(
 
         return ResponseBuilder.success(
             request=request,
-            data={"unread_count": unread_count},
+            data={"unreadCount": unread_count},
             message="Unread count retrieved",
         )
 

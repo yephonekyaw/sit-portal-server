@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from app.db.models import NotificationRecipient, Notification, NotificationStatus
 from app.utils.logging import get_logger
+from app.schemas.notification_schemas import (
+    GetUserNotificationItem,
+)
 from .registry import NotificationServiceRegistry
 
 logger = get_logger()
@@ -80,76 +83,23 @@ class UserNotificationService:
                         notification_id=notification.id,  # type: ignore
                     )
 
-                    formatted_notification = {
-                        "id": str(recipient.id),
-                        "notification_id": str(notification.id),
-                        "subject": (
-                            message.get("subject", "Notification")
-                            if message
-                            else "Notification"
-                        ),
-                        "body": (
-                            message.get("body", "You have a new notification")
-                            if message
-                            else "You have a new notification"
-                        ),
-                        "notification_type": {
-                            "code": notification.notification_type.code,
-                            "name": notification.notification_type.name,
-                            "entity_type": notification.notification_type.entity_type,
-                        },
-                        "priority": notification.priority.value,
-                        "status": recipient.status.value,
-                        "in_app_enabled": recipient.in_app_enabled,
-                        "line_app_enabled": recipient.line_app_enabled,
-                        "created_at": recipient.created_at.isoformat(),
-                        "delivered_at": (
-                            recipient.delivered_at.isoformat()
-                            if recipient.delivered_at
-                            else None
-                        ),
-                        "read_at": (
-                            recipient.read_at.isoformat() if recipient.read_at else None
-                        ),
-                        "is_read": recipient.read_at is not None,
-                        "entity_id": str(notification.entity_id),
-                        "actor_type": notification.actor_type.value,
-                        "scheduled_for": (
-                            notification.scheduled_for.isoformat()
-                            if notification.scheduled_for
-                            else None
-                        ),
-                        "expires_at": (
-                            notification.expires_at.isoformat()
-                            if notification.expires_at
-                            else None
-                        ),
-                    }
-
-                    formatted_notifications.append(formatted_notification)
+                    formatted_notification = await self._construct_notification_item(
+                        recipient, notification, message
+                    )
+                    formatted_notifications.append(
+                        formatted_notification.model_dump(by_alias=True)
+                    )
 
                 except Exception as e:
                     logger.warning(
                         f"Failed to format notification {notification.id} for user {user_id}: {str(e)}"
                     )
                     # Add basic notification without formatted content
+                    formatted_notification = await self._construct_notification_item(
+                        recipient, notification, error_msg="Content unavailable"
+                    )
                     formatted_notifications.append(
-                        {
-                            "id": str(recipient.id),
-                            "notification_id": str(notification.id),
-                            "subject": f"Notification - {notification.notification_type.name}",
-                            "body": "Unable to load notification content",
-                            "notification_type": {
-                                "code": notification.notification_type.code,
-                                "name": notification.notification_type.name,
-                                "entity_type": notification.notification_type.entity_type,
-                            },
-                            "priority": notification.priority.value,
-                            "status": recipient.status.value,
-                            "created_at": recipient.created_at.isoformat(),
-                            "is_read": recipient.read_at is not None,
-                            "error": "Content unavailable",
-                        }
+                        formatted_notification.model_dump(by_alias=True)
                     )
 
             logger.info(
@@ -305,6 +255,59 @@ class UserNotificationService:
                 exc_info=True,
             )
             return 0
+
+    async def _construct_notification_item(
+        self,
+        recipient: NotificationRecipient,
+        notification: Notification,
+        message: Optional[Dict[str, str]] = None,
+        error_msg: Optional[str] = None,
+    ) -> GetUserNotificationItem:
+        """Construct a GetUserNotificationItem from database objects"""
+        notification_item = GetUserNotificationItem(
+            id=str(recipient.id),
+            notification_id=str(notification.id),
+            notification_code=notification.notification_type.code,
+            notification_name=notification.notification_type.name,
+            entity_id=str(notification.entity_id),
+            entity_type=notification.notification_type.entity_type,
+            subject=(
+                message.get("subject", "Notification")
+                if message
+                else f"Notification - {notification.notification_type.name}"
+            ),
+            body=(
+                message.get("body", "You have a new notification")
+                if message
+                else (
+                    "Unable to load notification content"
+                    if error_msg
+                    else "You have a new notification"
+                )
+            ),
+            priority=notification.priority.value,
+            status=recipient.status.value,
+            in_app_enabled=recipient.in_app_enabled,
+            line_app_enabled=recipient.line_app_enabled,
+            created_at=recipient.created_at.isoformat(),
+            delivered_at=(
+                recipient.delivered_at.isoformat() if recipient.delivered_at else None
+            ),
+            read_at=(recipient.read_at.isoformat() if recipient.read_at else None),
+            is_read=recipient.read_at is not None,
+            actor_type=notification.actor_type.value,
+            scheduled_for=(
+                notification.scheduled_for.isoformat()
+                if notification.scheduled_for
+                else None
+            ),
+            expires_at=(
+                notification.expires_at.isoformat() if notification.expires_at else None
+            ),
+            error=error_msg,
+        )
+
+        return notification_item
 
     async def _get_notification_content(
         self,

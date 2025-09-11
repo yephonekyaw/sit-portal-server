@@ -119,15 +119,20 @@
 #     text = " ".join(df["text"].fillna("").str.strip())
 #     print(f"Extracted Text:\n{text} with confidence {confidence.round(2)}")
 
-from app.services.langchain_service import get_langchain_service
+from sqlalchemy import select
+
+from app.db.session import get_sync_session
+from app.db.models import NotificationRecipient
 
 
-def test_open_ai_chat():
-    langchain_service = get_langchain_service()
-    llm_chat = langchain_service.get_openai_chat_model()
-    response = llm_chat.invoke("Hello, how are you?")
-    print(response)
+def temp():
+    for db_session in get_sync_session():
+        notifications = (
+            (db_session.execute(select(NotificationRecipient))).scalars().all()
+        )
+        for notification in notifications:
+            print(notification.read_at)
 
 
 if __name__ == "__main__":
-    test_open_ai_chat()
+    temp()
