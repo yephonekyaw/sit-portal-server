@@ -36,13 +36,8 @@ class ProgramRequirementScheduleNotificationService(BaseNotificationService):
         )
 
         return {
-            "deadline_date": (
+            "due_date": (
                 deadline_date.strftime("%Y-%m-%d") if deadline_date else "N/A"
-            ),
-            "grace_period_deadline": (
-                grace_deadline_date.strftime("%Y-%m-%d")
-                if grace_deadline_date
-                else "N/A"
             ),
             "days_remaining": DeadlineCalculator.calculate_days_remaining(
                 deadline_date
@@ -51,28 +46,15 @@ class ProgramRequirementScheduleNotificationService(BaseNotificationService):
             "days_overdue": DeadlineCalculator.calculate_days_overdue(
                 grace_deadline_date
             ),
-            "is_overdue": DeadlineCalculator.is_deadline_passed(deadline_date),
         }
 
     def _format_requirement_data(
         self, schedule: ProgramRequirementSchedule
     ) -> Dict[str, Any]:
         """Extract and format requirement-specific data"""
-        mandatory_flag = (
-            "This is a mandatory requirement."
-            if schedule.program_requirement.is_mandatory
-            else "This is an optional requirement."
-        )
-
         return {
-            "schedule_id": str(schedule.id),
             "requirement_name": schedule.program_requirement.name,
             "program_name": schedule.program_requirement.program.program_name,
-            "program_code": schedule.program_requirement.program.program_code,
-            "academic_year": schedule.academic_year.year_code,
-            "is_mandatory": schedule.program_requirement.is_mandatory,
-            "mandatory_flag": mandatory_flag,
-            "target_year": schedule.program_requirement.target_year,
         }
 
     async def get_notification_data(

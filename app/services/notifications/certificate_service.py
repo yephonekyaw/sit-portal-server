@@ -63,7 +63,6 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
                     )
 
             data = {
-                "submission_id": str(submission.id),
                 "certificate_name": submission.certificate_type.cert_name,
                 "student_name": f"{submission.student.user.first_name} {submission.student.user.last_name}",
                 "student_roll_number": submission.student.user_id,
@@ -72,20 +71,7 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
                     if submission.requirement_schedule
                     else "N/A"
                 ),
-                "submission_date": (
-                    submission.created_at.strftime("%Y-%m-%d")
-                    if submission.created_at
-                    else "N/A"
-                ),
-                "updated_date": (
-                    submission.updated_at.strftime("%Y-%m-%d")
-                    if submission.updated_at
-                    else "N/A"
-                ),
-                "status": submission.submission_status.value,
-                "verifier_name": notification_metadata.get("verifier_name", "System"),
-                "filename": submission.filename,
-                "file_size": submission.file_size,
+                "rejection_reason": "N/A",
             }
 
             # Merge any additional metadata

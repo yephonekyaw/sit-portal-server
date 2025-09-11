@@ -205,7 +205,7 @@ async def mark_all_notifications_as_read(
         )
 
 
-@notifications_router.delete("/clear-all")
+@notifications_router.patch("/clear-all")
 async def clear_all_notifications(
     request: Request,
     current_user: Annotated[AuthState, Depends(get_current_user)],

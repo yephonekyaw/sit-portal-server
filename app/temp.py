@@ -131,7 +131,7 @@ def temp():
             (db_session.execute(select(NotificationRecipient))).scalars().all()
         )
         for notification in notifications:
-            print(notification.read_at)
+            print(notification.status)
 
 
 if __name__ == "__main__":

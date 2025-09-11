@@ -26,7 +26,7 @@ def seed_notification_channel_templates(db_session: Session):
 
     templates = []
 
-    # Copy the same template logic but with str(uuid.uuid4()) instead of uuid.uuid4()
+    # Certificate Submission Submit
     if "certificate_submission_submit" in notification_types:
         nt_id = notification_types["certificate_submission_submit"].id
         templates.extend(
@@ -46,6 +46,240 @@ def seed_notification_channel_templates(db_session: Session):
                     channel_type=ChannelType.LINE_APP,
                     template_subject="Certificate Submitted",
                     template_body="{certificate_name} submitted!\n\n{student_name} ({student_roll_number})\n{program_name}\nStatus: Under Review",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Certificate Submission Update
+    if "certificate_submission_update" in notification_types:
+        nt_id = notification_types["certificate_submission_update"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Certificate Updated: {certificate_name}",
+                    template_body="**Submission Updated**\n{student_name} ({student_roll_number}) from {program_name}\nUpdated: {certificate_name}\nStatus: Under Review",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Certificate Updated",
+                    template_body="{certificate_name} updated!\n\n{student_name} ({student_roll_number})\n{program_name}\nStatus: Under Review",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Certificate Submission Delete
+    if "certificate_submission_delete" in notification_types:
+        nt_id = notification_types["certificate_submission_delete"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Certificate Deleted: {certificate_name}",
+                    template_body="**Submission Deleted**\n{student_name} ({student_roll_number}) from {program_name}\nDeleted: {certificate_name}",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Certificate Deleted",
+                    template_body="{certificate_name} deleted\n\n{student_name} ({student_roll_number})\n{program_name}",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Certificate Submission Verify
+    if "certificate_submission_verify" in notification_types:
+        nt_id = notification_types["certificate_submission_verify"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Certificate Approved: {certificate_name}",
+                    template_body="**✅ Approved**\nYour certificate submission has been approved!\n\n**Certificate:** {certificate_name}\n**Program:** {program_name}\n**Status:** Approved",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Certificate Approved ✅",
+                    template_body="Great news! Your certificate has been approved.\n\n{certificate_name}\n{program_name}\nStatus: Approved",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Certificate Submission Reject
+    if "certificate_submission_reject" in notification_types:
+        nt_id = notification_types["certificate_submission_reject"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Certificate Rejected: {certificate_name}",
+                    template_body="**❌ Rejected**\nYour certificate submission requires revision.\n\n**Certificate:** {certificate_name}\n**Program:** {program_name}\n**Status:** Rejected\n**Reason:** {rejection_reason}",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Certificate Rejected ❌",
+                    template_body="Your certificate needs revision.\n\n{certificate_name}\n{program_name}\nReason: {rejection_reason}",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Certificate Submission Request (Manual Review)
+    if "certificate_submission_request" in notification_types:
+        nt_id = notification_types["certificate_submission_request"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Manual Review Required: {certificate_name}",
+                    template_body="**🔍 Manual Review Required**\nA certificate submission needs your attention.\n\n**Student:** {student_name} ({student_roll_number})\n**Certificate:** {certificate_name}\n**Program:** {program_name}\n**Status:** Awaiting Manual Review",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Manual Review Required 🔍",
+                    template_body="Certificate needs manual review:\n\n{student_name} ({student_roll_number})\n{certificate_name}\n{program_name}",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Program Requirement Schedule Remind
+    if "program_requirement_schedule_remind" in notification_types:
+        nt_id = notification_types["program_requirement_schedule_remind"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Reminder: {requirement_name} Due Soon",
+                    template_body="**📅 Reminder**\nDon't forget to submit your certificate!\n\n**Requirement:** {requirement_name}\n**Program:** {program_name}\n**Due Date:** {due_date}\n**Days Remaining:** {days_remaining}",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Reminder: Certificate Due Soon 📅",
+                    template_body="Don't forget to submit:\n\n{requirement_name}\n{program_name}\nDue: {due_date}\n{days_remaining} days left",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Program Requirement Schedule Warn
+    if "program_requirement_schedule_warn" in notification_types:
+        nt_id = notification_types["program_requirement_schedule_warn"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Warning: {requirement_name} Due Soon",
+                    template_body="**⚠️ Warning**\nUrgent: Certificate submission deadline approaching!\n\n**Requirement:** {requirement_name}\n**Program:** {program_name}\n**Due Date:** {due_date}\n**Days Remaining:** {days_remaining}",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Warning: Deadline Approaching ⚠️",
+                    template_body="Urgent! Submit soon:\n\n{requirement_name}\n{program_name}\nDue: {due_date}\nOnly {days_remaining} days left!",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Program Requirement Schedule Late
+    if "program_requirement_schedule_late" in notification_types:
+        nt_id = notification_types["program_requirement_schedule_late"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Late: {requirement_name} Past Due",
+                    template_body="**🔴 Late Submission**\nYour certificate submission is past due.\n\n**Requirement:** {requirement_name}\n**Program:** {program_name}\n**Was Due:** {due_date}\n**Days Late:** {days_late}",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="Late Submission 🔴",
+                    template_body="Past due! Please submit:\n\n{requirement_name}\n{program_name}\nWas due: {due_date}\n{days_overdue} days overdue",
+                    template_format=TemplateFormat.TEXT,
+                    is_active=True,
+                ),
+            ]
+        )
+
+    # Program Requirement Schedule Overdue
+    if "program_requirement_schedule_overdue" in notification_types:
+        nt_id = notification_types["program_requirement_schedule_overdue"].id
+        templates.extend(
+            [
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.IN_APP,
+                    template_subject="Overdue: {requirement_name} Critical",
+                    template_body="**🚨 Overdue - Critical**\nImmediate action required for your certificate submission.\n\n**Requirement:** {requirement_name}\n**Program:** {program_name}\n**Was Due:** {due_date}\n**Days Overdue:** {days_late}\n\nPlease contact your program coordinator immediately.",
+                    template_format=TemplateFormat.MARKDOWN,
+                    is_active=True,
+                ),
+                NotificationChannelTemplate(
+                    id=str(uuid.uuid4()),
+                    notification_type_id=nt_id,
+                    channel_type=ChannelType.LINE_APP,
+                    template_subject="OVERDUE - Critical 🚨",
+                    template_body="CRITICAL: Submit immediately!\n\n{requirement_name}\n{program_name}\nWas due: {due_date}\n{days_late} days overdue\n\nContact coordinator now!",
                     template_format=TemplateFormat.TEXT,
                     is_active=True,
                 ),
