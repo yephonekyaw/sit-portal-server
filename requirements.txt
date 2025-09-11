@@ -52,9 +52,12 @@ markdown-it-py==3.0.0
 MarkupSafe==3.0.2
 mdurl==0.1.2
 minio==7.2.16
+numpy==2.3.3
 orjson==3.10.18
 packaging==24.2
+pandas==2.3.2
 passlib==1.7.4
+pillow==11.3.0
 playwright==1.53.0
 prompt_toolkit==3.0.51
 proto-plus==1.26.1
@@ -70,9 +73,12 @@ pyee==13.0.0
 Pygments==2.19.2
 PyJWT==2.10.1
 PyMuPDF==1.26.3
+pyodbc==5.2.0
+pytesseract @ git+https://github.com/madmaze/pytesseract.git@df9fce0b5c5ea3cd9182fce8870ab9241d951173
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.1
 python-multipart==0.0.20
+pytz==2025.2
 PyYAML==6.0.2
 redis==5.2.1
 requests==2.32.4

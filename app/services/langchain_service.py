@@ -1,7 +1,8 @@
 from functools import lru_cache
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from typing import List
+from pydantic import SecretStr
 
 from app.config.settings import settings
 
@@ -10,20 +11,20 @@ class LangChainService:
     """Service for LangChain operations with Google Gemini integration"""
 
     def __init__(self):
-        self.google_api_key = settings.GEMINI_API_KEY
-        self.gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
+        self.openai_api_key = SecretStr(settings.OPENAI_API_KEY)
+        self.openai_model = settings.OPENAI_MODEL or "gpt-4o-mini"
 
-        if not self.google_api_key:
+        if not self.openai_api_key:
             raise ValueError(
-                "Google API key (GEMINI_API_KEY) is not set in the settings."
+                "OpenAI API key (OPENAI_API_KEY) is not set in the settings."
             )
 
     @lru_cache(maxsize=1)
-    def get_gemini_chat_model(self) -> ChatGoogleGenerativeAI:
-        """Returns a cached instance of the Google Gemini chat model."""
-        return ChatGoogleGenerativeAI(
-            model=self.gemini_model,
-            google_api_key=self.google_api_key,
+    def get_openai_chat_model(self) -> ChatOpenAI:
+        """Returns a cached instance of the OpenAI chat model."""
+        return ChatOpenAI(
+            model=self.openai_model,
+            api_key=self.openai_api_key,
             temperature=0.2,
         )
 

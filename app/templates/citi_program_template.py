@@ -41,7 +41,7 @@ citi_program_verification_template = """You are a CITI Program Certificate Valid
      - The verification URL (it must appear **after the last hyphen**)
    - The **verification URL** must strictly follow the format:  
      *www.citiprogram.org/verify/?[unique-id]-[record-id]*
-   - The unique-id portion should be a UUID format
+   - The unique-id portion can either be a long string or an UUID
    - The record-id portion must match the Record ID in the document body
 
    ### File Date Consistency

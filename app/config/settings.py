@@ -15,15 +15,13 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "<your-log-level>"
     COOKIE_DOMAIN: str = "<your-cookie-domain>"
 
-    # Google Cloud
-    GEMINI_API_KEY: str = "<your-gemini-api-key>"
-    GEMINI_MODEL: str = "<your-gemini-model-name>"
-    GOOGLE_APPLICATION_CREDENTIALS: str = (
-        "<path-to-your-google-application-credentials-json>"
-    )
-    GOOGLE_CLOUD_PROJECT_ID: str = "<your-google-cloud-project-id>"
-    DOCUMENT_AI_PROCESSOR_ID: str = "<your-document-ai-processor-id>"
-    DOCUMENT_AI_LOCATION: str = "<your-document-ai-location>"
+    # Open AI
+    OPENAI_API_KEY: str = "<your-openai-api-key>"
+    OPENAI_MODEL: str = "gpt-5-mini"
+
+    # Tesseract OCR
+    TESSERACT_CMD: str = ""
+    TESSDATA_PREFIX: str = ""
 
     # Database
     DATABASE_URL: str = "<your-database-url>"

@@ -200,7 +200,7 @@ class CitiProgramAutomationService:
                 verification_confidence=verification_text.get("confidence", 0),
             )
 
-            llm_chat = langchain_service.get_gemini_chat_model()
+            llm_chat = langchain_service.get_openai_chat_model()
             response = cast(
                 CitiValidationResponse,
                 llm_chat.with_structured_output(schema=CitiValidationResponse).invoke(

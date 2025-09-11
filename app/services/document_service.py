@@ -1,9 +1,12 @@
-import asyncio
-import pymupdf
 import re
+import pymupdf
+import pytesseract
+from PIL import Image
+from PIL.ImageFile import ImageFile
+from io import BytesIO
 from pathlib import Path
 from typing import Dict, Any, Optional
-from google.cloud import documentai_v1
+
 
 from app.config.settings import settings
 
@@ -21,16 +24,7 @@ class DocumentService:
             "bmp",
             "webp",
         }
-        self.client = (
-            documentai_v1.DocumentProcessorServiceClient.from_service_account_json(
-                settings.GOOGLE_APPLICATION_CREDENTIALS
-            )
-        )
-        self.processor_name = (
-            f"projects/{settings.GOOGLE_CLOUD_PROJECT_ID}/"
-            f"locations/{settings.DOCUMENT_AI_LOCATION}/"
-            f"processors/{settings.DOCUMENT_AI_PROCESSOR_ID}"
-        )
+        self.tesseract_config = r"--oem 1 --psm 3"
 
     async def extract_text(self, file_content: bytes, filename: str) -> Dict[str, Any]:
         """Extract text from file content asynchronously."""
@@ -38,7 +32,7 @@ class DocumentService:
 
         try:
             if file_extension in self.supported_image_extensions:
-                result = await self._extract_with_document_ai(file_content, filename)
+                result = await self._extract_with_tesseract(file_content, filename)
             elif file_extension == "pdf":
                 result = await self._extract_from_pdf(file_content, filename)
             else:
@@ -98,12 +92,11 @@ class DocumentService:
 
     async def _extract_from_pdf(self, pdf_data: bytes, filename: str) -> Dict[str, Any]:
         """Try PyMuPDF first, Document AI if no meaningful text."""
-        # Try PyMuPDF first (run in thread pool since it's CPU-bound)
         result = await self._extract_with_pymupdf(pdf_data)
 
-        # Use Document AI if PyMuPDF failed or text is poor quality
+        # Use Tesseract OCR if PyMuPDF failed or text is poor quality
         if not result["success"] or len(result["text"].strip()) < 50:
-            return await self._extract_with_document_ai(pdf_data, filename)
+            return await self._extract_with_tesseract(pdf_data, filename)
 
         result["method"] = "pymupdf"
         return result
@@ -111,81 +104,91 @@ class DocumentService:
     async def _extract_with_pymupdf(self, pdf_data: bytes) -> Dict[str, Any]:
         """Extract text using PyMuPDF in thread pool."""
 
-        def _pymupdf_sync(pdf_data: bytes) -> Dict[str, Any]:
-            try:
-                doc = pymupdf.open(stream=pdf_data, filetype="pdf")
-                all_text = []
-                page_count = len(doc)
+        try:
+            doc = pymupdf.open(stream=pdf_data, filetype="pdf")
+            all_text = []
+            page_count = len(doc)
 
-                for page_num in range(page_count):
-                    page = doc.load_page(page_num)
-                    text = page.get_textpage().extractTEXT()
-                    if text.strip():
-                        all_text.append(text.strip())
+            for page_num in range(page_count):
+                page = doc.load_page(page_num)
+                text = page.get_textpage().extractTEXT()
+                if text.strip():
+                    all_text.append(text.strip())
 
-                full_text = "\n\n".join(all_text)
-                doc.close()
+            full_text = "\n\n".join(all_text)
+            doc.close()
 
-                return {
-                    "text": full_text,
-                    "success": len(full_text.strip()) > 0,
-                    "pages": page_count,
-                    "confidence": 99 if full_text.strip() else 0,
-                }
+            return {
+                "text": full_text,
+                "success": len(full_text.strip()) > 0,
+                "method": "pymupdf",
+                "pages": page_count,
+                "confidence": 99.00 if full_text.strip() else 0.00,
+            }
 
-            except Exception as e:
-                return {
-                    "text": "",
-                    "success": False,
-                    "pages": 0,
-                    "confidence": 0,
-                    "error": f"PyMuPDF failed: {str(e)}",
-                }
+        except Exception as e:
+            return {
+                "text": "",
+                "success": False,
+                "method": "pymupdf",
+                "pages": 0,
+                "confidence": 0,
+                "error": f"PyMuPDF failed: {str(e)}",
+            }
 
-        # Run PyMuPDF in thread pool since it's CPU-bound
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _pymupdf_sync, pdf_data)
-
-    async def _extract_with_document_ai(
+    async def _extract_with_tesseract(
         self, file_data: bytes, filename: str
     ) -> Dict[str, Any]:
-        """Extract text using Document AI asynchronously."""
+        try:
+            pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
 
-        def _document_ai_sync(file_data: bytes, filename: str) -> Dict[str, Any]:
-            try:
-                mime_type = self._get_mime_type(filename)
+            mime_type = self._get_mime_type(filename)
 
-                request = documentai_v1.ProcessRequest(
-                    name=self.processor_name,
-                    raw_document=documentai_v1.RawDocument(
-                        content=file_data, mime_type=mime_type
-                    ),
-                )
+            pil_img_data: None | ImageFile = None
 
-                result = self.client.process_document(request=request)
-                document = result.document
+            if mime_type == "application/pdf":
+                # If it's a PDF, convert first page to a Pillow image
+                doc = pymupdf.open(stream=file_data, filetype="pdf")
+                pdf_page = doc.load_page(0)
+                pixmap = pdf_page.get_pixmap(dpi=300)  # type: ignore
+                pixmap = pymupdf.Pixmap(pixmap, 0) if pixmap.alpha else pixmap
 
-                return {
-                    "text": document.text,
-                    "success": len(document.text.strip()) > 0,
-                    "method": "document_ai",
-                    "pages": len(document.pages),
-                    "confidence": 85,
-                }
+                img_data = pixmap.pil_tobytes(format="png")
+                pil_img_data = Image.open(BytesIO(img_data))
+                doc.close()
+                pdf_page = None  # Free memory
+                pixmap = None  # Free memory
+            else:
+                # If it's an image, open directly with Pillow
+                pil_img_data = Image.open(BytesIO(file_data))
 
-            except Exception as e:
-                return {
-                    "text": "",
-                    "success": False,
-                    "method": "error",
-                    "pages": 0,
-                    "confidence": 0,
-                    "error": f"Document AI failed: {str(e)}",
-                }
+            # Get OCR results as a DataFrame
+            df = pytesseract.image_to_data(
+                pil_img_data,
+                output_type=pytesseract.Output.DATAFRAME,
+                config=self.tesseract_config,
+            )
+            df = df.loc[df["conf"] > 70, ["text", "conf"]]
+            text = " ".join(df["text"].fillna("").str.strip())
+            confidence = df["conf"].mean()
 
-        # Run Document AI in thread pool since it's I/O-bound but blocking
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, _document_ai_sync, file_data, filename)
+            return {
+                "text": text,
+                "success": len(text.strip()) > 0,
+                "method": "tesseract",
+                "pages": 1,
+                "confidence": confidence.round(2),
+            }
+
+        except Exception as e:
+            return {
+                "text": "",
+                "success": False,
+                "method": "tesseract",
+                "pages": 0,
+                "confidence": 0,
+                "error": f"Tesseract OCR failed: {str(e)}",
+            }
 
     def _get_mime_type(self, filename: str) -> str:
         """Get MIME type from filename."""
@@ -207,7 +210,7 @@ class DocumentService:
         return {
             "text": "",
             "success": False,
-            "method": "error",
+            "method": "unknown",
             "pages": 0,
             "confidence": 0,
             "error": error_message,
