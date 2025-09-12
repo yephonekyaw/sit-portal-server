@@ -1,4 +1,4 @@
-name: "sit-portal"
+name: "sit-portal-server"
 
 services:
   redis:
@@ -9,7 +9,7 @@ services:
       - 6379:6379
     command: redis-server --requirepass jubi-miyazaki-homonochi --appendonly yes
     volumes:
-      - sit_portal_volume:/data
+      - sit-portal-volume:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "jubi-miyazaki-homonochi", "ping"]
       interval: 30s
@@ -58,27 +58,27 @@ services:
     networks:
       - sit-portal-network
 
-  celery-beat:
-    build:
-      context: .
-      dockerfile: docker/Dockerfile.celery
-    container_name: sit-portal-beat
-    restart: unless-stopped
-    command: celery -A app.celery beat --loglevel=info
-    env_file:
-      - .env
-    volumes:
-      - ./logs:/server/logs
-    depends_on:
-      redis:
-        condition: service_healthy
-      api:
-        condition: service_healthy
-    networks:
-      - sit-portal-network
+  # celery-beat:
+  #   build:
+  #     context: .
+  #     dockerfile: docker/Dockerfile.celery
+  #   container_name: sit-portal-beat
+  #   restart: unless-stopped
+  #   command: celery -A app.celery beat --loglevel=info
+  #   env_file:
+  #     - .env
+  #   volumes:
+  #     - ./logs:/server/logs
+  #   depends_on:
+  #     redis:
+  #       condition: service_healthy
+  #     api:
+  #       condition: service_healthy
+  #   networks:
+  #     - sit-portal-network
 
 volumes:
-  sit_portal_volume:
+  sit-portal-volume:
     driver: local
 networks:
   sit-portal-network:
