@@ -36,7 +36,7 @@ def create_application() -> FastAPI:
     # Add CORS middleware
     application.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://sitportal.test:5173", "http://localhost:5173"],
+        allow_origins=settings.ALLOWED_HOSTS,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         allow_headers=["Content-Type", "Authorization", "authorization"],

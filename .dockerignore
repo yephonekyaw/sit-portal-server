@@ -22,7 +22,6 @@ wheels
 MANIFEST
 
 # Virtual environments
-.env
 .venv
 env/
 venv/
@@ -80,15 +79,11 @@ htmlcov/
 *.db
 *.sqlite3
 
-# Uploads (if you want to exclude them from the image)
+# Uploads
 uploads/
 
-# Keys and certificates (if any)
+# Keys and certificates
 keys/
 *.pem
 *.key
 *.crt
-
-# Environment files
-.env*
-!.env.example
