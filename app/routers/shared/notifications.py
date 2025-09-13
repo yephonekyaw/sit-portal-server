@@ -1,4 +1,3 @@
-import uuid
 from typing import Annotated
 from fastapi import APIRouter, Depends, Request, Query
 from sqlalchemy.orm import Session
@@ -35,27 +34,13 @@ async def get_unread_notifications(
     Excludes failed, expired, pending, and already read notifications.
     """
     try:
-        # Convert user_id from string to UUID
-        try:
-            user_uuid = uuid.UUID(current_user.user_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid user ID format",
-                        "input": current_user.user_id,
-                    }
-                ]
-            )
-
         service = UserNotificationService(db)
         notifications = await service.get_unread_notifications(
-            user_id=user_uuid, limit=limit, offset=offset
+            user_id=current_user.user_id, limit=limit, offset=offset
         )
 
         # Get total unread count for pagination info
-        unread_count = await service.get_unread_count(user_uuid)
+        unread_count = await service.get_unread_count(current_user.user_id)
 
         dumped_data = {
             "notifications": notifications,
@@ -97,43 +82,16 @@ async def mark_notification_as_read(
         notification_id: UUID of the notification recipient record to mark as read
     """
     try:
-        # Validate UUID formats
-        try:
-            notification_uuid = uuid.UUID(notification_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid notification ID format",
-                        "input": notification_id,
-                    }
-                ]
-            )
-
-        try:
-            user_uuid = uuid.UUID(current_user.user_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid user ID format",
-                        "input": current_user.user_id,
-                    }
-                ]
-            )
-
         service = UserNotificationService(db)
         success = await service.mark_notification_as_read(
-            user_id=user_uuid, notification_recipient_id=notification_uuid
+            user_id=current_user.user_id, notification_recipient_id=notification_id
         )
 
         if not success:
             raise NotFoundError("Notification not found or already read")
 
         # Get updated unread count
-        unread_count = await service.get_unread_count(user_uuid)
+        unread_count = await service.get_unread_count(current_user.user_id)
 
         return ResponseBuilder.success(
             request=request,
@@ -165,22 +123,8 @@ async def mark_all_notifications_as_read(
     This is a bulk operation that marks all unread notifications as read.
     """
     try:
-        # Convert user_id from string to UUID
-        try:
-            user_uuid = uuid.UUID(current_user.user_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid user ID format",
-                        "input": current_user.user_id,
-                    }
-                ]
-            )
-
         service = UserNotificationService(db)
-        updated_count = await service.mark_all_as_read(user_uuid)
+        updated_count = await service.mark_all_as_read(current_user.user_id)
 
         return ResponseBuilder.success(
             request=request,
@@ -219,22 +163,8 @@ async def clear_all_notifications(
     for audit purposes.
     """
     try:
-        # Convert user_id from string to UUID
-        try:
-            user_uuid = uuid.UUID(current_user.user_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid user ID format",
-                        "input": current_user.user_id,
-                    }
-                ]
-            )
-
         service = UserNotificationService(db)
-        cleared_count = await service.clear_all_notifications(user_uuid)
+        cleared_count = await service.clear_all_notifications(current_user.user_id)
 
         return ResponseBuilder.success(
             request=request,
@@ -266,22 +196,8 @@ async def get_unread_count(
     This is useful for displaying notification badges in the UI.
     """
     try:
-        # Convert user_id from string to UUID
-        try:
-            user_uuid = uuid.UUID(current_user.user_id)
-        except ValueError:
-            raise ValidationError(
-                [
-                    {
-                        "type": "value_error",
-                        "msg": "Invalid user ID format",
-                        "input": current_user.user_id,
-                    }
-                ]
-            )
-
         service = UserNotificationService(db)
-        unread_count = await service.get_unread_count(user_uuid)
+        unread_count = await service.get_unread_count(current_user.user_id)
 
         return ResponseBuilder.success(
             request=request,

@@ -1,3 +1,4 @@
+from uuid import UUID
 from pydantic import Field
 from .camel_base_model import CamelCaseBaseModel as BaseModel
 
@@ -13,7 +14,7 @@ class LoginRequest(BaseModel):
 class UserResponse(BaseModel):
     """User response schema"""
 
-    id: str = Field(..., description="User ID")
+    id: str | UUID = Field(..., description="User ID")
     username: str = Field(..., description="Username")
     first_name: str = Field(..., description="First name")
     last_name: str = Field(..., description="Last name")

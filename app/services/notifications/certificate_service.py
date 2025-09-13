@@ -1,4 +1,3 @@
-import uuid
 import json
 from typing import Dict, Any
 
@@ -23,7 +22,7 @@ class CertificateSubmissionNotificationService(BaseNotificationService):
     """Unified certificate submission notification service"""
 
     async def get_notification_data(
-        self, entity_id: uuid.UUID, notification_id: uuid.UUID
+        self, entity_id: str, notification_id: str
     ) -> Dict[str, Any]:
         """Get certificate submission data for all notification types"""
         try:

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-import uuid
+from uuid import UUID
 from pydantic import Field
 from app.db.models import SubmissionStatus, VerificationType
 
@@ -9,15 +9,15 @@ from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 class StudentSubmissionItem(BaseModel):
     # Student data
-    id: str = Field(..., description="Unique identifier")
-    student_id: str = Field(..., description="Student ID")
+    id: str | UUID = Field(..., description="Unique identifier")
+    student_id: str | UUID = Field(..., description="Student ID")
     student_roll_number: str = Field(..., description="Student roll number")
     student_name: str = Field(..., description="Student full name")
     student_email: str = Field(..., description="Student email address")
     student_enrollment_status: str = Field(..., description="Student enrollment status")
 
     # Submission data (None if not submitted)
-    submission_id: Optional[str] = Field(None, description="Submission ID")
+    submission_id: Optional[str | UUID] = Field(None, description="Submission ID")
     file_object_name: Optional[str] = Field(
         None, description="File object name in MinIO"
     )
@@ -43,25 +43,25 @@ class StudentSubmissionItem(BaseModel):
 
 class SubmissionRelatedDate(BaseModel):
     # Schedule data
-    schedule_id: str = Field(..., description="Program requirement schedule ID")
+    schedule_id: str | UUID = Field(..., description="Program requirement schedule ID")
     submission_deadline: str = Field(
         ..., description="Submission deadline (ISO format)"
     )
 
     # Requirement data
-    requirement_id: str = Field(..., description="Program requirement ID")
+    requirement_id: str | UUID = Field(..., description="Program requirement ID")
     requirement_name: str = Field(..., description="Requirement name")
     target_year: int = Field(..., description="Target year for completion")
     is_mandatory: bool = Field(..., description="Whether requirement is mandatory")
     special_instruction: Optional[str] = Field(None, description="Special instructions")
 
     # Program data
-    program_id: str = Field(..., description="Program ID")
+    program_id: str | UUID = Field(..., description="Program ID")
     program_code: str = Field(..., description="Program code")
     program_name: str = Field(..., description="Program name")
 
     # Certificate type data
-    cert_type_id: str = Field(..., description="Certificate type ID")
+    cert_type_id: str | UUID = Field(..., description="Certificate type ID")
     cert_code: str = Field(..., description="Certificate code")
     cert_name: str = Field(..., description="Certificate name")
     cert_description: str = Field(..., description="Certificate description")
@@ -84,7 +84,7 @@ class GetListOfSubmissions(BaseModel):
 class VerificationHistoryResponse(BaseModel):
     """Response schema for verification history"""
 
-    id: str = Field(..., description="Verification history ID")
+    id: str | UUID = Field(..., description="Verification history ID")
     verification_type: VerificationType = Field(
         ..., description="Type of verification (manual/agent)"
     )
@@ -108,14 +108,14 @@ class VerificationHistoryListResponse(BaseModel):
     total_count: int = Field(
         ..., description="Total number of verification history records"
     )
-    submission_id: str = Field(..., description="Certificate submission ID")
+    submission_id: str | UUID = Field(..., description="Certificate submission ID")
 
 
 class ManualVerificationRequestBody(BaseModel):
     """Request schema for manual verification"""
 
-    submission_id: uuid.UUID = Field(..., description="Certificate submission ID")
-    schedule_id: uuid.UUID = Field(..., description="Program requirement schedule ID")
+    submission_id: str | UUID = Field(..., description="Certificate submission ID")
+    schedule_id: str | UUID = Field(..., description="Program requirement schedule ID")
     status: str = Field(
         ...,
         description="Verification status",

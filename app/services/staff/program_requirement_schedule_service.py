@@ -1,5 +1,4 @@
 from typing import List, Optional, Dict, Any
-import uuid
 from datetime import timedelta
 
 from fastapi import Depends
@@ -8,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select
 
 from app.services.staff.dashboard_stats_service import get_dashboard_stats_service
+from app.utils.datetime_utils import to_naive_utc
 from app.utils.logging import get_logger
 from app.db.models import (
     ProgramRequirement,
@@ -36,7 +36,7 @@ class ProgramRequirementScheduleService:
         self.dashboard_stats_service = get_dashboard_stats_service(db_session)
 
     async def get_schedule_by_id(
-        self, schedule_id: uuid.UUID
+        self, schedule_id: str
     ) -> Optional[ProgramRequirementSchedule]:
         """Get schedule by ID or return None if not found"""
         result = self.db.execute(
@@ -47,7 +47,7 @@ class ProgramRequirementScheduleService:
         return result.scalar_one_or_none()
 
     async def get_program_requirement_by_id(
-        self, program_requirement_id: uuid.UUID
+        self, program_requirement_id: str
     ) -> Optional[ProgramRequirement]:
         """Get program requirement by ID or return None if not found"""
         result = self.db.execute(
@@ -58,7 +58,7 @@ class ProgramRequirementScheduleService:
         return result.scalar_one_or_none()
 
     async def get_academic_year_by_id(
-        self, academic_year_id: uuid.UUID
+        self, academic_year_id: str
     ) -> Optional[AcademicYear]:
         """Get academic year by ID or return None if not found"""
         result = self.db.execute(
@@ -68,7 +68,7 @@ class ProgramRequirementScheduleService:
 
     # Validation Methods
     async def validate_program_requirement_active(
-        self, program_requirement_id: uuid.UUID
+        self, program_requirement_id: str
     ) -> ProgramRequirement:
         """Validate that program requirement exists and is active"""
         program_requirement = await self.get_program_requirement_by_id(
@@ -84,7 +84,7 @@ class ProgramRequirementScheduleService:
         return program_requirement
 
     async def validate_academic_year_exists(
-        self, academic_year_id: uuid.UUID
+        self, academic_year_id: str
     ) -> AcademicYear:
         """Validate that academic year exists"""
         academic_year = await self.get_academic_year_by_id(academic_year_id)
@@ -96,9 +96,9 @@ class ProgramRequirementScheduleService:
 
     async def validate_deadline_within_academic_year(
         self,
-        academic_year_id: uuid.UUID,
+        academic_year_id: str,
         submission_deadline,
-        program_requirement_id: uuid.UUID,
+        program_requirement_id: str,
     ) -> None:
         """Validate that submission deadline falls within the academic year considering program duration"""
         academic_year = await self.validate_academic_year_exists(academic_year_id)
@@ -128,7 +128,7 @@ class ProgramRequirementScheduleService:
             raise ValueError("DEADLINE_OUTSIDE_ACADEMIC_YEAR")
 
     async def check_schedule_exists(
-        self, program_requirement_id: uuid.UUID, academic_year_id: uuid.UUID
+        self, program_requirement_id: str, academic_year_id: str
     ) -> bool:
         """Check if schedule already exists for this combination"""
         result = self.db.execute(
@@ -142,9 +142,9 @@ class ProgramRequirementScheduleService:
 
     async def check_schedule_exists_for_update(
         self,
-        program_requirement_id: uuid.UUID,
-        academic_year_id: uuid.UUID,
-        current_schedule_id: uuid.UUID,
+        program_requirement_id: str,
+        academic_year_id: str,
+        current_schedule_id: str,
     ) -> bool:
         """Check if schedule already exists for this combination (excluding current schedule)"""
         result = self.db.execute(
@@ -163,6 +163,10 @@ class ProgramRequirementScheduleService:
     ) -> Dict[str, Any]:
         """Create a new program requirement schedule with validation"""
         try:
+            schedule_data.submission_deadline = to_naive_utc(
+                schedule_data.submission_deadline
+            )
+
             # Validate program requirement is active
             program_requirement = await self.validate_program_requirement_active(
                 schedule_data.program_requirement_id
@@ -233,11 +237,15 @@ class ProgramRequirementScheduleService:
 
     async def update_schedule(
         self,
-        schedule_id: uuid.UUID,
+        schedule_id: str,
         schedule_data: UpdateProgramRequirementScheduleRequest,
     ) -> Dict[str, Any]:
         """Update an existing program requirement schedule with validation"""
         try:
+            schedule_data.submission_deadline = to_naive_utc(
+                schedule_data.submission_deadline
+            )
+
             # Get existing schedule
             existing_schedule = await self.get_schedule_by_id(schedule_id)
             if not existing_schedule:
@@ -430,8 +438,6 @@ class ProgramRequirementScheduleService:
     ) -> Dict[str, Any]:
         """Create standardized schedule response data"""
 
-        # IDs are already UUID types even though Pylance is complaining them as str
-        # If we wrap them with uuid.UUID(...) it will cause error
         schedule_response = ProgramRequirementScheduleResponse(
             id=schedule.id,  # type: ignore
             program_requirement_id=schedule.program_requirement_id,  # type: ignore

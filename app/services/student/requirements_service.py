@@ -1,5 +1,3 @@
-from datetime import datetime
-from uuid import UUID
 from typing import List
 
 from sqlalchemy import select
@@ -23,6 +21,7 @@ from app.schemas.student.requirement_schemas import (
 from app.services.minio_service import MinIOService
 from app.utils.errors import BusinessLogicError
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 logger = get_logger()
 
@@ -37,7 +36,7 @@ class RequirementsService:
     async def get_student_by_user_id(self, user_id: str) -> Student:
         """Get student record by user ID with validation"""
         student = (
-            self.db.execute(select(Student).where(Student.user_id == UUID(user_id)))
+            self.db.execute(select(Student).where(Student.user_id == user_id))
         ).scalar_one_or_none()
 
         if not student:
@@ -146,24 +145,15 @@ class RequirementsService:
     ) -> StudentRequirementWithSubmissionResponse:
         """Submit or update a certificate for verification"""
 
-        # Validate and parse UUIDs
-        try:
-            schedule_uuid = UUID(submission_data.schedule_id)
-            requirement_uuid = UUID(submission_data.requirement_id)
-            cert_type_uuid = UUID(submission_data.cert_type_id)
-            program_uuid = UUID(submission_data.program_id)
-        except ValueError:
-            raise BusinessLogicError("Invalid request data format")
-
         # Validate certificate type exists
-        cert_type = self.db.get(CertificateType, cert_type_uuid)
+        cert_type = self.db.get(CertificateType, submission_data.cert_type_id)
         if not cert_type:
             raise BusinessLogicError("Certificate type not found")
 
         # Validate schedule exists and load related data
         schedule_stmt = (
             select(ProgramRequirementSchedule)
-            .where(ProgramRequirementSchedule.id == schedule_uuid)
+            .where(ProgramRequirementSchedule.id == submission_data.schedule_id)
             .options(
                 selectinload(
                     ProgramRequirementSchedule.program_requirement
@@ -180,7 +170,7 @@ class RequirementsService:
 
         # Validate student permissions
         if (
-            student.program_id != program_uuid
+            student.program_id != submission_data.program_id
             or student.academic_year_id != schedule.academic_year_id
         ):
             raise BusinessLogicError("Not enrolled in this program")
@@ -190,15 +180,10 @@ class RequirementsService:
         existing_submission = None
 
         if is_edit:
-            try:
-                submission_edit_uuid = UUID(submission_data.submission_id)
-            except ValueError:
-                raise BusinessLogicError("Invalid submission ID format")
-
             existing_submission = (
                 self.db.execute(
                     select(CertificateSubmission).where(
-                        CertificateSubmission.id == submission_edit_uuid,
+                        CertificateSubmission.id == submission_data.submission_id,
                         CertificateSubmission.student_id == student.id,
                         CertificateSubmission.requirement_schedule_id == schedule.id,
                     )
@@ -274,9 +259,9 @@ class RequirementsService:
 
             existing_submission.submission_status = SubmissionStatus.PENDING
             existing_submission.agent_confidence_score = 0.0
-            existing_submission.submitted_at = datetime.now()
+            existing_submission.submitted_at = naive_utc_now()
 
-            current_time = datetime.now()
+            current_time = naive_utc_now()
             if current_time <= schedule.submission_deadline:
                 existing_submission.submission_timing = SubmissionTiming.ON_TIME
             else:
@@ -292,7 +277,7 @@ class RequirementsService:
             # Build and return complete response
             return self._build_submission_response(existing_submission, schedule)
         else:
-            current_time = datetime.now()
+            current_time = naive_utc_now()
             if current_time <= schedule.submission_deadline:
                 timing = SubmissionTiming.ON_TIME
             else:
@@ -300,8 +285,8 @@ class RequirementsService:
 
             submission = CertificateSubmission(
                 student_id=student.id,
-                cert_type_id=cert_type_uuid,
-                requirement_schedule_id=schedule_uuid,
+                cert_type_id=submission_data.cert_type_id,
+                requirement_schedule_id=submission_data.schedule_id,
                 file_object_name=upload_result["object_name"],
                 filename=submission_data.file.filename or "unknown",
                 file_size=upload_result["size"],
@@ -364,15 +349,10 @@ class RequirementsService:
         self, submission_id: str, student_id: str
     ) -> None:
         """Validate that a submission belongs to the specified student"""
-        try:
-            submission_uuid = UUID(submission_id)
-        except ValueError:
-            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
-
         submission = (
             self.db.execute(
                 select(CertificateSubmission).where(
-                    CertificateSubmission.id == submission_uuid
+                    CertificateSubmission.id == submission_id
                 )
             )
         ).scalar_one_or_none()

@@ -1,7 +1,6 @@
 import json
 from abc import ABC, abstractmethod
 from typing import Optional, List, Dict, Any
-import uuid
 from datetime import datetime
 
 from sqlalchemy.orm import Session
@@ -46,7 +45,7 @@ class BaseNotificationService(ABC):
 
     @abstractmethod
     async def get_notification_data(
-        self, entity_id: uuid.UUID, notification_id: uuid.UUID
+        self, entity_id: str, notification_id: str
     ) -> Dict[str, Any]:
         """Get data for notification templates - implemented by subclasses"""
         pass
@@ -103,16 +102,16 @@ class BaseNotificationService(ABC):
 
     async def create(
         self,
-        entity_id: uuid.UUID,
+        entity_id: str,
         actor_type: str,
-        recipient_ids: List[uuid.UUID],
-        actor_id: Optional[uuid.UUID] = None,
+        recipient_ids: List[str],
+        actor_id: Optional[str] = None,
         scheduled_for: Optional[datetime] = None,
         expires_at: Optional[datetime] = None,
         in_app_enabled: bool = True,
         line_app_enabled: bool = False,
         **metadata,
-    ) -> uuid.UUID:
+    ) -> str:
         """Create notification and recipients"""
         try:
             notification_type = await self._get_notification_type()

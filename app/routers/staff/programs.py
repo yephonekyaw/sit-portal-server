@@ -1,5 +1,4 @@
 from typing import Annotated, cast
-import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
@@ -96,7 +95,7 @@ async def create_program(
 async def update_program(
     request: Request,
     program_data: UpdateProgramRequest,
-    program_id: Annotated[uuid.UUID, Path(description="Program ID to update")],
+    program_id: Annotated[str, Path(description="Program ID to update")],
     program_service: ProgramService = Depends(get_program_service),
 ):
     """Update an existing academic program with validation"""
@@ -129,7 +128,7 @@ async def update_program(
 )
 async def archive_program(
     request: Request,
-    program_id: Annotated[uuid.UUID, Path(description="Program ID to archive")],
+    program_id: Annotated[str, Path(description="Program ID to archive")],
     program_service: ProgramService = Depends(get_program_service),
 ):
     """Archive a program and all its active requirements"""

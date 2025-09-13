@@ -11,6 +11,7 @@ from app.db.models import (
     CertificateType,
 )
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import from_bangkok_to_naive_utc
 
 logger = get_logger()
 
@@ -67,7 +68,7 @@ def seed_program_requirement_schedules(db_session: Session):
 
     # Create schedule for 2023 academic year
     # Deadline: November 30, 2023 at 11:59 PM (simplified for MSSQL)
-    submission_deadline = datetime(2025, 11, 30, 23, 59, 59)
+    submission_deadline = from_bangkok_to_naive_utc(datetime(2025, 11, 30, 23, 59, 59))
 
     # Grace period: 7 days after deadline
     grace_period_deadline = submission_deadline + timedelta(

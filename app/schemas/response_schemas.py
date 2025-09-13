@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, Optional, List
 import uuid
@@ -6,6 +5,7 @@ import uuid
 from pydantic import Field
 
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
+from app.utils.datetime_utils import utc_now
 
 
 class ResponseStatus(str, Enum):
@@ -47,10 +47,10 @@ class ApiResponse(BaseModel):
     )
     warnings: Optional[List[str]] = Field(default=None, description="Warning messages")
     timestamp: str = Field(
-        default_factory=lambda: datetime.now().isoformat(),
+        default_factory=lambda: utc_now().isoformat(),
         description="Response timestamp",
     )
-    request_id: str = Field(
+    request_id: str | uuid.UUID = Field(
         default_factory=lambda: str(uuid.uuid4()),
         description="Unique request identifier",
     )

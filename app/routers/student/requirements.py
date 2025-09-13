@@ -1,5 +1,4 @@
 from typing import List, Annotated, cast
-import uuid
 
 from fastapi import APIRouter, Depends, Request, Form, Path, status
 from sqlalchemy.orm import Session
@@ -100,10 +99,10 @@ async def submit_student_certificate(
         create_notification_sync(
             request_id=str(request.state.request_id),
             notification_code="certificate_submission_submit",
-            entity_id=uuid.UUID(submission_response.submission_id),
+            entity_id=submission_response.submission_id,
             actor_type="user",
             recipient_ids=staff_user_ids,
-            actor_id=uuid.UUID(current_user.user_id),
+            actor_id=current_user.user_id,
             scheduled_for=None,
             expires_at=None,
             in_app_enabled=True,

@@ -1,3 +1,4 @@
+from uuid import UUID
 from typing import Any, Dict, List, Optional
 from pydantic import Field
 
@@ -5,11 +6,11 @@ from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
 
 class GetUserNotificationItem(BaseModel):
-    id: str = Field(..., description="Notification recipient ID")
-    notification_id: str = Field(..., description="Notification ID")
+    id: str | UUID = Field(..., description="Notification recipient ID")
+    notification_id: str | UUID = Field(..., description="Notification ID")
     notification_code: str = Field(..., description="Notification code")
     notification_name: str = Field(..., description="Notification name")
-    entity_id: str = Field(..., description="Related entity ID")
+    entity_id: str | UUID = Field(..., description="Related entity ID")
     entity_type: str = Field(..., description="Notification entity type")
 
     subject: str = Field(..., description="Notification subject")

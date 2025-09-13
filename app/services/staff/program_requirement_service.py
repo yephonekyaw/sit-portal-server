@@ -1,6 +1,5 @@
 from typing import Optional, Dict, Any, List
 from datetime import date
-import uuid
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -34,7 +33,7 @@ class ProgramRequirementService:
 
     # Core CRUD Operations
     async def get_requirement_by_id(
-        self, requirement_id: uuid.UUID
+        self, requirement_id: str
     ) -> Optional[ProgramRequirement]:
         """Get program requirement by ID or return None if not found"""
         result = self.db.execute(
@@ -107,7 +106,7 @@ class ProgramRequirementService:
             raise e
 
     async def archive_requirement(
-        self, requirement_id: uuid.UUID
+        self, requirement_id: str
     ) -> ProgramRequirementResponse:
         """Archive a program requirement with proper effective_until_year handling"""
         # Get the requirement to archive
@@ -150,7 +149,7 @@ class ProgramRequirementService:
 
     async def update_requirement(
         self,
-        requirement_id: uuid.UUID,
+        requirement_id: str,
         requirement_data: UpdateProgramRequirementRequest,
     ) -> ProgramRequirementResponse:
         """Update an existing program requirement with comprehensive validation"""
@@ -334,9 +333,7 @@ class ProgramRequirementService:
             raise e
 
     # Helper Methods
-    async def _validate_program_exists_and_active(
-        self, program_id: uuid.UUID
-    ) -> Program:
+    async def _validate_program_exists_and_active(self, program_id: str) -> Program:
         """Validate that program exists and is active"""
         program = self.db.get_one(Program, program_id)
 
@@ -348,9 +345,7 @@ class ProgramRequirementService:
 
         return program
 
-    async def _validate_certificate_type_exists_and_active(
-        self, cert_type_id: uuid.UUID
-    ):
+    async def _validate_certificate_type_exists_and_active(self, cert_type_id: str):
         """Validate that certificate type exists and is active"""
         result = self.db.execute(
             select(CertificateType).where(CertificateType.id == cert_type_id)
@@ -373,7 +368,7 @@ class ProgramRequirementService:
         return result.scalar_one_or_none()
 
     async def _get_latest_schedule_academic_year(
-        self, requirement_id: uuid.UUID
+        self, requirement_id: str
     ) -> Optional[int]:
         """Get the latest academic year for which schedules have been created"""
         result = self.db.execute(

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload
 
@@ -7,6 +7,8 @@ from app.celery import celery
 from app.db.session import get_sync_session
 from app.db.models import Notification, NotificationRecipient, NotificationStatus
 from app.utils.logging import get_logger
+
+from app.utils.datetime_utils import utc_now, to_utc
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=30)
@@ -28,7 +30,7 @@ async def _async_daily_scheduled_notifications_processor(request_id: str):
     for db_session in get_sync_session():
         try:
             # Get current date in UTC
-            current_date = datetime.now().date()
+            current_date = utc_now().date()
 
             # Query notifications scheduled for today that have pending recipients
             result = db_session.execute(
@@ -39,19 +41,15 @@ async def _async_daily_scheduled_notifications_processor(request_id: str):
                     and_(
                         # Scheduled for today
                         Notification.scheduled_for
-                        >= datetime.combine(current_date, datetime.min.time()).replace(
-                            tzinfo=timezone.utc
-                        ),
+                        >= to_utc(datetime.combine(current_date, datetime.min.time())),
                         Notification.scheduled_for
-                        < datetime.combine(current_date, datetime.max.time()).replace(
-                            tzinfo=timezone.utc
-                        ),
+                        < to_utc(datetime.combine(current_date, datetime.max.time())),
                         # Has pending recipients
                         NotificationRecipient.status == NotificationStatus.PENDING,
                         # Not expired
                         (
                             (Notification.expires_at == None)
-                            | (Notification.expires_at > datetime.now())
+                            | (Notification.expires_at > utc_now())
                         ),
                     )
                 )

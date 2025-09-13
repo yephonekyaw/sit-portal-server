@@ -1,5 +1,4 @@
 from typing import Annotated
-import uuid
 from fastapi import APIRouter, Depends, Path, Request, status
 
 from app.middlewares.auth_middleware import require_staff
@@ -25,7 +24,7 @@ dashboard_stats_router = APIRouter(dependencies=[Depends(require_staff)])
 def get_dashboard_stats_by_schedule(
     request: Request,
     requirement_schedule_id: Annotated[
-        uuid.UUID, Path(description="Requirement schedule ID")
+        str, Path(description="Requirement schedule ID")
     ],
     dashboard_stats_service: DashboardStatsService = Depends(
         get_dashboard_stats_service

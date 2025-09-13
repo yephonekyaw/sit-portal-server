@@ -18,10 +18,10 @@ from app.db.models import (
 )
 from app.services.staff.dashboard_stats_service import get_dashboard_stats_service
 from app.utils.logging import get_logger
-from app.utils.errors import DatabaseError
+from app.utils.datetime_utils import *
 
 # Bangkok timezone for business logic calculations
-BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
+# BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -53,7 +53,7 @@ async def _async_monthly_schedule_creator(request_id: str):
 
     for db_session in get_sync_session():
         try:
-            current_datetime = datetime.now()
+            current_datetime = utc_now()
             current_academic_year = _calculate_current_academic_year(current_datetime)
 
             logger.info(
@@ -297,7 +297,7 @@ async def _get_academic_years_map(db_session: Session) -> Dict[int, AcademicYear
 
 async def _get_existing_schedules_map(
     db_session: Session, requirements: List[ProgramRequirement]
-) -> Set[Tuple[uuid.UUID, int]]:
+) -> Set[Tuple[str, int]]:
     """Get existing schedules to avoid duplicates. Key is (requirement_id, student_cohort_year)."""
     requirement_ids = [req.id for req in requirements]
 
@@ -383,22 +383,16 @@ def _calculate_deadline_datetime(
     deadline_month = requirement.deadline_date.month
     deadline_day = requirement.deadline_date.day
 
-    # Create deadline in Bangkok timezone at end of day (23:59:59)
-    # This represents the business deadline in local time
-    deadline_bangkok = datetime(
-        year=deadline_academic_year,
-        month=deadline_month,
-        day=deadline_day,
-        hour=23,
-        minute=59,
-        second=59,
-        tzinfo=BANGKOK_TZ,
+    return from_bangkok_to_naive_utc(
+        datetime(
+            year=deadline_academic_year,
+            month=deadline_month,
+            day=deadline_day,
+            hour=23,
+            minute=59,
+            second=59,
+        )
     )
-
-    # Convert to UTC for database storage
-    deadline_utc = deadline_bangkok.astimezone(timezone.utc)
-
-    return deadline_utc
 
 
 async def _get_or_create_academic_year(
@@ -414,12 +408,10 @@ async def _get_or_create_academic_year(
     # Academic year runs from August 1 to May 31
 
     # Start: August 1 at 00:00:00 Bangkok time
-    start_bangkok = datetime(year_code, 8, 1, 0, 0, 0, tzinfo=BANGKOK_TZ)
-    start_utc = start_bangkok.astimezone(timezone.utc)
+    start_utc = from_bangkok_to_naive_utc(datetime(year_code, 8, 1, 0, 0, 0))
 
     # End: May 31 at 23:59:59 Bangkok time of the following year
-    end_bangkok = datetime(year_code + 1, 5, 31, 23, 59, 59, tzinfo=BANGKOK_TZ)
-    end_utc = end_bangkok.astimezone(timezone.utc)
+    end_utc = from_bangkok_to_naive_utc(datetime(year_code + 1, 5, 31, 23, 59, 59))
 
     academic_year = AcademicYear(
         id=uuid.uuid4(),
@@ -461,14 +453,16 @@ async def _update_last_recurrence_timestamps(
     ) in processed_requirements_data.items():
         # Set last_recurrence_at to August 1st of the student cohort year
         # This way we only need to compare years, not specific dates
-        recurrence_timestamp = datetime(
-            year=student_cohort_year,
-            month=8,
-            day=1,
-            hour=0,
-            minute=0,
-            second=0,
-            tzinfo=timezone.utc,
+
+        recurrence_timestamp = to_naive_utc(
+            datetime(
+                year=student_cohort_year,
+                month=8,
+                day=1,
+                hour=0,
+                minute=0,
+                second=0,
+            )
         )
         requirement.last_recurrence_at = recurrence_timestamp
 

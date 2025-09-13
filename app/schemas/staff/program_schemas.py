@@ -1,7 +1,7 @@
 from typing import Optional, Literal
 from datetime import datetime
 from pydantic import Field
-import uuid
+from uuid import UUID
 
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
@@ -23,7 +23,7 @@ class CreateProgramRequest(BaseModel):
 class UpdateProgramRequest(BaseModel):
     """Request schema for updating an existing program"""
 
-    id: uuid.UUID = Field(..., description="Program ID")
+    id: str | UUID = Field(..., description="Program ID")
     program_code: str = Field(
         ..., min_length=1, max_length=20, description="Unique program code"
     )
@@ -37,7 +37,7 @@ class UpdateProgramRequest(BaseModel):
 class ProgramResponse(BaseModel):
     """Response schema for program data"""
 
-    id: uuid.UUID = Field(..., description="Program ID")
+    id: str | UUID = Field(..., description="Program ID")
     program_code: str = Field(..., description="Program code")
     program_name: str = Field(..., description="Program name")
     description: str = Field(..., description="Program description")
@@ -50,7 +50,7 @@ class ProgramResponse(BaseModel):
 class GetProgramsItem(BaseModel):
     """Response schema for program list item with requirement counts"""
 
-    id: uuid.UUID = Field(..., description="Program ID")
+    id: str | UUID = Field(..., description="Program ID")
     program_code: str = Field(..., description="Program code")
     program_name: str = Field(..., description="Program name")
     description: str = Field(..., description="Program description")

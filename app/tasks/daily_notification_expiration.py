@@ -8,6 +8,8 @@ from app.db.session import get_sync_session
 from app.db.models import Notification, NotificationStatus
 from app.utils.logging import get_logger
 
+from app.utils.datetime_utils import utc_now
+
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=30)
 def daily_notification_expiration_task(self, request_id: str):
@@ -28,8 +30,8 @@ async def _async_daily_notification_expiration(request_id: str):
     for db_session in get_sync_session():
         try:
             # Get current date in UTC
-            current_date = datetime.now().date()
-            current_datetime = datetime.now()
+            current_date = utc_now().date()
+            current_datetime = utc_now()
 
             # Query notifications that expire today and have pending recipients
             notifications_result = db_session.execute(

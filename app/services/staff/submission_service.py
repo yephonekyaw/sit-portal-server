@@ -1,5 +1,4 @@
 from typing import Dict, Sequence
-from uuid import UUID
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -158,16 +157,10 @@ class SubmissionService:
             raise e
 
     async def get_submission_by_id(self, submission_id: str) -> CertificateSubmission:
-        """Get a certificate submission by ID"""
-        try:
-            submission_uuid = UUID(submission_id)
-        except ValueError:
-            raise ValueError("CERTIFICATE_SUBMISSION_NOT_FOUND")
-
         submission = (
             self.db.execute(
                 select(CertificateSubmission).where(
-                    CertificateSubmission.id == submission_uuid
+                    CertificateSubmission.id == submission_id
                 )
             )
         ).scalar_one_or_none()
@@ -292,12 +285,6 @@ class SubmissionService:
     async def _validate_schedule_exists(
         self, schedule_id: str
     ) -> ProgramRequirementSchedule:
-        """Validate that a program requirement schedule exists"""
-        try:
-            schedule_uuid = UUID(schedule_id)
-        except ValueError:
-            raise ValueError("SCHEDULE_NOT_FOUND")
-
         schedule = (
             self.db.execute(
                 select(ProgramRequirementSchedule)
@@ -310,7 +297,7 @@ class SubmissionService:
                     ).selectinload(ProgramRequirement.certificate_type),
                     selectinload(ProgramRequirementSchedule.academic_year),
                 )
-                .where(ProgramRequirementSchedule.id == schedule_uuid)
+                .where(ProgramRequirementSchedule.id == schedule_id)
             )
         ).scalar_one_or_none()
 
@@ -323,14 +310,9 @@ class SubmissionService:
         self, submission_id: str
     ) -> Sequence[VerificationHistory]:
         """Fetch verification history for a submission"""
-        try:
-            submission_uuid = UUID(submission_id)
-        except ValueError:
-            return []
-
         history_query = (
             select(VerificationHistory)
-            .where(VerificationHistory.submission_id == submission_uuid)
+            .where(VerificationHistory.submission_id == submission_id)
             .order_by(VerificationHistory.created_at.desc())
         )
 

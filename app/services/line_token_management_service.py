@@ -1,6 +1,6 @@
 import json
 import time
-from datetime import datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
 from urllib.parse import quote_plus
@@ -16,6 +16,7 @@ from app.config.settings import settings
 from app.db.models import LineChannelAccessToken
 from app.utils.logging import get_logger
 from app.utils.errors import LineApplicationError
+from app.utils.datetime_utils import naive_utc_now
 
 logger = get_logger()
 
@@ -156,7 +157,7 @@ class LineChannelTokenService:
         self, token_data: Dict[str, str]
     ) -> LineChannelAccessToken:
         """Store a new access token in the database."""
-        expires_at = datetime.now() + timedelta(seconds=int(token_data["expires_in"]))
+        expires_at = naive_utc_now() + timedelta(seconds=int(token_data["expires_in"]))
 
         # Deactivate all existing tokens first
         self.db.execute(
@@ -189,7 +190,7 @@ class LineChannelTokenService:
                 and_(
                     LineChannelAccessToken.is_active == True,
                     LineChannelAccessToken.is_revoked == False,
-                    LineChannelAccessToken.expires_at > datetime.now(),
+                    LineChannelAccessToken.expires_at > naive_utc_now(),
                 )
             )
             .order_by(LineChannelAccessToken.expires_at.desc())
@@ -205,7 +206,7 @@ class LineChannelTokenService:
             select(LineChannelAccessToken).where(
                 and_(
                     LineChannelAccessToken.key_id.in_(valid_kids),
-                    LineChannelAccessToken.expires_at <= datetime.now(),
+                    LineChannelAccessToken.expires_at <= naive_utc_now(),
                     LineChannelAccessToken.is_revoked == False,
                 )
             )
@@ -220,7 +221,7 @@ class LineChannelTokenService:
             .values(
                 is_revoked=True,
                 is_active=False,
-                revoked_at=datetime.now(),
+                revoked_at=naive_utc_now(),
             )
         )
         self.db.commit()
@@ -237,7 +238,7 @@ class LineChannelTokenService:
 
     async def cleanup_expired_tokens(self) -> int:
         """Remove expired and revoked tokens that are safe to clean up."""
-        cutoff_date = datetime.now() - timedelta(days=7)
+        cutoff_date = naive_utc_now() - timedelta(days=7)
 
         result = self.db.execute(
             select(LineChannelAccessToken).where(

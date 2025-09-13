@@ -8,14 +8,12 @@ This task runs every 15 days to:
 """
 
 import asyncio
-from datetime import datetime
-from typing import Dict, Any
-
 
 from app.celery import celery
 from app.db.session import get_sync_session
 from app.services.line_token_management_service import LineChannelTokenService
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=300)
@@ -47,7 +45,7 @@ async def _async_line_token_manager(request_id: str):
             current_token = await line_service.get_active_access_token()
             if (
                 not current_token
-                or (current_token.expires_at - datetime.now()).days <= 7
+                or (current_token.expires_at - naive_utc_now()).days <= 7
             ):
                 new_token = await line_service.generate_and_store_new_token()
                 if new_token:

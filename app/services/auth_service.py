@@ -1,5 +1,4 @@
 from typing import Optional, Tuple
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from ldap3 import Server, Connection
@@ -8,6 +7,7 @@ from app.db.models import User
 from app.utils.auth import AuthUtils, AuthTokens
 from app.utils.errors import AuthenticationError
 from app.config.settings import settings
+from app.utils.datetime_utils import naive_utc_now
 
 
 class AuthService:
@@ -69,7 +69,7 @@ class AuthService:
 
         # Store refresh token in database
         user.refresh_token = tokens.refresh_token
-        user.last_login = datetime.now()
+        user.last_login = naive_utc_now()
         self.db.commit()
 
         return tokens, user

@@ -122,16 +122,24 @@
 from sqlalchemy import select
 
 from app.db.session import get_sync_session
-from app.db.models import NotificationRecipient
+from app.db.models import Program
 
 
 def temp():
     for db_session in get_sync_session():
         notifications = (
-            (db_session.execute(select(NotificationRecipient))).scalars().all()
+            (
+                db_session.execute(
+                    select(Program).where(
+                        Program.id == "43EB5C8A-96BD-434F-84D5-1E39CAC2BF33"
+                    )
+                )
+            )
+            .scalars()
+            .all()
         )
         for notification in notifications:
-            print(notification.status)
+            print(notification.__dict__.values())
 
 
 if __name__ == "__main__":

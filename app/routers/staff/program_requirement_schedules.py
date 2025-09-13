@@ -1,5 +1,4 @@
 from typing import Annotated
-import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
@@ -17,8 +16,6 @@ from app.utils.error_handlers import handle_service_error
 from app.middlewares.auth_middleware import require_staff
 
 program_requirement_schedules_router = APIRouter(dependencies=[Depends(require_staff)])
-
-
 
 
 # API Endpoints
@@ -102,7 +99,7 @@ async def create_program_requirement_schedule(
 )
 async def update_program_requirement_schedule(
     request: Request,
-    schedule_id: Annotated[uuid.UUID, Path(description="Schedule ID to update")],
+    schedule_id: Annotated[str, Path(description="Schedule ID to update")],
     schedule_data: UpdateProgramRequirementScheduleRequest,
     schedule_service: ProgramRequirementScheduleService = Depends(
         get_program_requirement_schedule_service

@@ -1,5 +1,5 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta
 from typing import Dict, Any, Optional
 from uuid import uuid4
 
@@ -8,6 +8,7 @@ from minio.error import S3Error
 from fastapi import UploadFile, HTTPException
 
 from app.config.settings import settings
+from app.utils.datetime_utils import format_utc_datetime, naive_utc_now
 
 
 class MinIOService:
@@ -56,7 +57,7 @@ class MinIOService:
 
         try:
             # Add timestamp prefix to avoid naming conflicts
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = format_utc_datetime("%Y%m%d_%H%M%S")
             object_name = (
                 f"{prefix}/{uuid4()}_{timestamp}_{filename}"
                 if prefix
@@ -87,7 +88,7 @@ class MinIOService:
                 "content_type": content_type,
                 "etag": result.etag,
                 "version_id": result.version_id,
-                "upload_time": datetime.now().isoformat(),
+                "upload_time": naive_utc_now().isoformat(),
             }
 
         except S3Error as e:
@@ -123,7 +124,7 @@ class MinIOService:
                 filename = file.filename
 
             # Add timestamp prefix to avoid naming conflicts
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            timestamp = format_utc_datetime("%Y%m%d_%H%M%S")
             object_name = (
                 f"{prefix}/{uuid4()}_{timestamp}_{filename}"
                 if prefix
@@ -159,7 +160,7 @@ class MinIOService:
                 "content_type": file.content_type,
                 "etag": result.etag,
                 "version_id": result.version_id,
-                "upload_time": datetime.now().isoformat(),
+                "upload_time": naive_utc_now().isoformat(),
             }
 
         except S3Error as e:
@@ -194,7 +195,7 @@ class MinIOService:
                 "success": True,
                 "object_name": object_name,
                 "bucket_name": self.bucket_name,
-                "deleted_at": datetime.now().isoformat(),
+                "deleted_at": naive_utc_now().isoformat(),
             }
 
         except S3Error as e:
@@ -250,7 +251,7 @@ class MinIOService:
                 )
 
             presigned_url = await loop.run_in_executor(None, _generate_url_sync)
-            expires_at = datetime.now() + timedelta(hours=expires_in_hours)
+            expires_at = naive_utc_now() + timedelta(hours=expires_in_hours)
 
             return {
                 "success": True,

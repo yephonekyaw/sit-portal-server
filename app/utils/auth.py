@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import timedelta, datetime
 from typing import Optional, Dict, Any
 import uuid
 import jwt
@@ -6,6 +6,7 @@ from passlib.context import CryptContext
 import bcrypt
 
 from app.config.settings import settings
+from app.utils.datetime_utils import utc_now, to_utc
 
 # Password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -28,7 +29,7 @@ class AuthUtils:
         user_id: str, username: str, user_type: str, token_version: int = 0
     ) -> str:
         """Generate JWT access token with user information"""
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
         payload = {
@@ -48,7 +49,7 @@ class AuthUtils:
     @staticmethod
     def generate_refresh_token(user_id: str) -> str:
         """Generate JWT refresh token"""
-        now = datetime.now(timezone.utc)
+        now = utc_now()
         expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
         payload = {
@@ -145,8 +146,8 @@ class AuthUtils:
             if not exp_timestamp:
                 return True
 
-            exp_datetime = datetime.fromtimestamp(exp_timestamp, tz=timezone.utc)
-            buffer_time = datetime.now(timezone.utc) + timedelta(minutes=buffer_minutes)
+            exp_datetime = to_utc(datetime.fromtimestamp(exp_timestamp))
+            buffer_time = utc_now() + timedelta(minutes=buffer_minutes)
 
             return exp_datetime <= buffer_time
         except Exception:

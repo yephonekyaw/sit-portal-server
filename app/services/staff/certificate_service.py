@@ -1,5 +1,4 @@
-from typing import Optional, List, Dict, Any, cast
-import uuid
+from typing import Optional, List, Dict, Any
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -25,7 +24,7 @@ class CertificateService:
         self.db = db
 
     async def get_certificate_by_id(
-        self, certificate_id: uuid.UUID
+        self, certificate_id: str
     ) -> Optional[CertificateType]:
         """Get certificate by ID"""
         return self.db.execute(
@@ -33,7 +32,7 @@ class CertificateService:
         ).scalar_one_or_none()
 
     async def check_certificate_code_exists(
-        self, code: str, exclude_id: Optional[uuid.UUID] = None
+        self, code: str, exclude_id: Optional[str] = None
     ) -> bool:
         """Check if certificate code already exists"""
         query = select(CertificateType).where(CertificateType.cert_code == code)
@@ -71,7 +70,7 @@ class CertificateService:
             raise e
 
     async def update_certificate(
-        self, certificate_id: uuid.UUID, certificate_data: UpdateCertificateRequest
+        self, certificate_id: str, certificate_data: UpdateCertificateRequest
     ) -> CertificateResponse:
         """Update certificate"""
         certificate = await self.get_certificate_by_id(certificate_id)
@@ -103,7 +102,7 @@ class CertificateService:
             logger.info(f"Updated certificate: {certificate.cert_code}")
 
             return CertificateResponse(
-                id=cast(uuid.UUID, certificate.id),
+                id=certificate.id,
                 cert_code=certificate.cert_code,
                 cert_name=certificate.cert_name,
                 description=certificate.description,
@@ -118,7 +117,7 @@ class CertificateService:
         except Exception as e:
             raise e
 
-    async def archive_certificate(self, certificate_id: uuid.UUID) -> Dict[str, Any]:
+    async def archive_certificate(self, certificate_id: str) -> Dict[str, Any]:
         """Archive certificate if no active requirements"""
         certificate = await self.get_certificate_by_id(certificate_id)
         if not certificate:
@@ -152,7 +151,7 @@ class CertificateService:
 
             return {
                 "certificate": CertificateResponse(
-                    id=cast(uuid.UUID, certificate.id),
+                    id=certificate.id,
                     cert_code=certificate.cert_code,
                     cert_name=certificate.cert_name,
                     description=certificate.description,

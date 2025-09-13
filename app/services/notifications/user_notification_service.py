@@ -1,6 +1,4 @@
 from typing import Dict, Any, Optional, List
-import uuid
-from datetime import datetime
 
 from sqlalchemy import select, and_, desc
 from sqlalchemy.orm import selectinload
@@ -11,6 +9,8 @@ from app.utils.logging import get_logger
 from app.schemas.notification_schemas import (
     GetUserNotificationItem,
 )
+from app.utils.datetime_utils import naive_utc_now
+
 from .registry import NotificationServiceRegistry
 
 logger = get_logger()
@@ -24,7 +24,7 @@ class UserNotificationService:
 
     async def get_user_notifications(
         self,
-        user_id: uuid.UUID,
+        user_id: str,
         status_filter: Optional[NotificationStatus] = None,
         limit: int = 50,
         offset: int = 0,
@@ -114,7 +114,7 @@ class UserNotificationService:
             )
             raise RuntimeError("USER_NOTIFICATIONS_RETRIEVAL_FAILED")
 
-    async def get_unread_count(self, user_id: uuid.UUID) -> int:
+    async def get_unread_count(self, user_id: str) -> int:
         """Get count of unread delivered notifications for a user"""
         try:
             from sqlalchemy import func
@@ -139,7 +139,7 @@ class UserNotificationService:
             return 0
 
     async def mark_notification_as_read(
-        self, user_id: uuid.UUID, notification_recipient_id: uuid.UUID
+        self, user_id: str, notification_recipient_id: str
     ) -> bool:
         """Mark a specific notification as read for a user"""
         try:
@@ -162,7 +162,7 @@ class UserNotificationService:
 
             # Mark as read if not already read
             if recipient.read_at is None:
-                recipient.read_at = datetime.now()
+                recipient.read_at = naive_utc_now()
                 recipient.status = NotificationStatus.READ
                 self.db.commit()
 
@@ -179,7 +179,7 @@ class UserNotificationService:
             )
             return False
 
-    async def mark_all_as_read(self, user_id: uuid.UUID) -> int:
+    async def mark_all_as_read(self, user_id: str) -> int:
         """Mark all unread notifications as read for a user"""
         try:
             from sqlalchemy import update
@@ -193,7 +193,7 @@ class UserNotificationService:
                         NotificationRecipient.read_at == None,
                     )
                 )
-                .values(read_at=datetime.now(), status=NotificationStatus.READ)
+                .values(read_at=naive_utc_now(), status=NotificationStatus.READ)
                 .execution_options(synchronize_session=False)
             )
 
@@ -213,7 +213,7 @@ class UserNotificationService:
             return 0
 
     async def get_unread_notifications(
-        self, user_id: uuid.UUID, limit: int = 50, offset: int = 0
+        self, user_id: str, limit: int = 50, offset: int = 0
     ) -> List[Dict[str, Any]]:
         """Get only delivered but unread notifications for a user"""
         return await self.get_user_notifications(
@@ -224,7 +224,7 @@ class UserNotificationService:
             unread_only=True,
         )
 
-    async def clear_all_notifications(self, user_id: uuid.UUID) -> int:
+    async def clear_all_notifications(self, user_id: str) -> int:
         """Clear all notifications by marking them as expired (they won't show up in client)"""
         try:
             from sqlalchemy import update
@@ -312,9 +312,9 @@ class UserNotificationService:
     async def _get_notification_content(
         self,
         notification_code: str,
-        entity_id: uuid.UUID,
+        entity_id: str,
         channel_type: str,
-        notification_id: uuid.UUID,
+        notification_id: str,
     ) -> Optional[Dict[str, str]]:
         """Get formatted notification content using notification service"""
         try:

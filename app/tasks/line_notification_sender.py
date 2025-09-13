@@ -2,7 +2,6 @@ import random
 import uuid
 import asyncio
 from typing import Optional
-from datetime import datetime
 
 from sqlalchemy import select, and_
 from sqlalchemy.orm import selectinload, Session
@@ -18,6 +17,7 @@ from app.db.models import (
 )
 from app.services.notifications.registry import NotificationServiceRegistry
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=5, default_retry_delay=120)
@@ -58,8 +58,8 @@ async def _async_send_line_notification(
                 .options(selectinload(Notification.notification_type))
                 .where(
                     and_(
-                        Notification.id == uuid.UUID(notification_id),
-                        NotificationRecipient.recipient_id == uuid.UUID(recipient_id),
+                        Notification.id == notification_id,
+                        NotificationRecipient.recipient_id == recipient_id,
                     )
                 )
             )
@@ -95,7 +95,7 @@ async def _async_send_line_notification(
 
             try:
                 notification_data = await service.get_notification_data(
-                    notification.entity_id, uuid.UUID(notification_id)
+                    notification.entity_id, notification_id
                 )
                 message = await service.construct_message("line_app", notification_data)
             except Exception as e:
@@ -117,7 +117,7 @@ async def _async_send_line_notification(
                 }
 
             # Validate recipient can receive LINE notifications
-            if not await _validate_line_recipient(db_session, uuid.UUID(recipient_id)):
+            if not await _validate_line_recipient(db_session, recipient_id):
                 logger.warning(
                     f"Recipient not configured for LINE notifications: {recipient_id}"
                 )
@@ -130,7 +130,7 @@ async def _async_send_line_notification(
                 }
 
             # Get recipient's LINE user ID
-            line_user_id = await _get_line_user_id(db_session, uuid.UUID(recipient_id))
+            line_user_id = await _get_line_user_id(db_session, recipient_id)
             if not line_user_id:
                 logger.error(f"Recipient LINE user ID not found: {recipient_id}")
                 recipient.status = NotificationStatus.FAILED
@@ -152,8 +152,8 @@ async def _async_send_line_notification(
             if mock_line_success:
                 # Update recipient status
                 recipient.status = NotificationStatus.DELIVERED
-                recipient.line_app_sent_at = datetime.now()
-                recipient.delivered_at = datetime.now()
+                recipient.line_app_sent_at = naive_utc_now()
+                recipient.delivered_at = naive_utc_now()
                 db_session.commit()
 
                 return {
@@ -188,9 +188,7 @@ async def _async_send_line_notification(
             }
 
 
-async def _validate_line_recipient(
-    db_session: Session, recipient_id: uuid.UUID
-) -> bool:
+async def _validate_line_recipient(db_session: Session, recipient_id: str) -> bool:
     """
     Validate that recipient has LINE configured.
 
@@ -214,9 +212,7 @@ async def _validate_line_recipient(
         return False
 
 
-async def _get_line_user_id(
-    db_session: Session, recipient_id: uuid.UUID
-) -> Optional[str]:
+async def _get_line_user_id(db_session: Session, recipient_id: str) -> Optional[str]:
     """Get the recipient's LINE user ID"""
     try:
         result = db_session.execute(

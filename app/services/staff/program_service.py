@@ -1,5 +1,4 @@
-from typing import Optional, Sequence, List, Dict, Any, cast
-import uuid
+from typing import Optional, Sequence, List, Dict, Any
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -27,13 +26,13 @@ class ProgramService:
         self.db = db_session
 
     # Core CRUD Operations
-    async def get_program_by_id(self, program_id: uuid.UUID) -> Optional[Program]:
+    async def get_program_by_id(self, program_id: str) -> Optional[Program]:
         """Get program by ID or return None if not found"""
         result = self.db.execute(select(Program).where(Program.id == program_id))
         return result.scalar_one_or_none()
 
     async def check_program_code_exists(
-        self, program_code: str, exclude_id: Optional[uuid.UUID] = None
+        self, program_code: str, exclude_id: Optional[str] = None
     ) -> bool:
         """Check if program code already exists (optionally excluding a specific ID)"""
         query = select(Program).where(Program.program_code == program_code)
@@ -74,7 +73,7 @@ class ProgramService:
             raise e
 
     async def update_program(
-        self, program_id: uuid.UUID, program_data: UpdateProgramRequest
+        self, program_id: str, program_data: UpdateProgramRequest
     ) -> ProgramResponse:
         """Update an existing program with validation"""
         # Check if program exists
@@ -122,7 +121,7 @@ class ProgramService:
         except Exception as e:
             raise e
 
-    async def archive_program(self, program_id: uuid.UUID) -> Dict[str, Any]:
+    async def archive_program(self, program_id: str) -> Dict[str, Any]:
         """Archive a program only if it has no active requirements"""
         # Check if program exists
         program = await self.get_program_by_id(program_id)
@@ -208,7 +207,7 @@ class ProgramService:
 
     # Helper Methods
     async def _get_conflicting_requirements(
-        self, program_id: uuid.UUID, new_duration: int
+        self, program_id: str, new_duration: int
     ) -> Sequence[ProgramRequirement]:
         """Get active requirements that conflict with new program duration"""
         result = self.db.execute(
@@ -225,7 +224,7 @@ class ProgramService:
     def _create_program_response(self, program: Program) -> ProgramResponse:
         """Create standardized program response data"""
         program_response = ProgramResponse(
-            id=cast(uuid.UUID, program.id),
+            id=program.id,
             program_code=program.program_code,
             program_name=program.program_name,
             description=program.description,

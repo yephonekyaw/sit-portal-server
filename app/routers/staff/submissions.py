@@ -1,5 +1,4 @@
 from typing import Annotated
-import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
@@ -39,9 +38,7 @@ submissions_router = APIRouter(dependencies=[Depends(require_staff)])
 )
 async def get_submissions_by_schedule_id(
     request: Request,
-    schedule_id: Annotated[
-        uuid.UUID, Path(description="Program requirement schedule ID")
-    ],
+    schedule_id: Annotated[str, Path(description="Program requirement schedule ID")],
     submission_service: SubmissionService = Depends(get_submission_service),
 ):
     """Get all student submissions for a specific program requirement schedule"""
@@ -92,7 +89,7 @@ async def get_submissions_by_schedule_id(
 )
 async def get_verification_history_by_submission_id(
     request: Request,
-    submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
+    submission_id: Annotated[str, Path(description="Certificate submission ID")],
     submission_service: SubmissionService = Depends(get_submission_service),
 ):
     """Get verification history for a specific certificate submission"""
@@ -136,7 +133,7 @@ async def get_verification_history_by_submission_id(
 )
 async def verify_submission(
     request: Request,
-    submission_id: Annotated[uuid.UUID, Path(description="Certificate submission ID")],
+    submission_id: Annotated[str, Path(description="Certificate submission ID")],
     verification_data: ManualVerificationRequestBody,
     submission_service: SubmissionService = Depends(get_submission_service),
     dashboard_stats_service: DashboardStatsService = Depends(
@@ -201,11 +198,7 @@ async def verify_submission(
                 entity_id=submission.id,  # type: ignore
                 actor_type="user",
                 recipient_ids=[student_user_id],
-                actor_id=(
-                    verifier_id
-                    if isinstance(verifier_id, uuid.UUID)
-                    else uuid.UUID(verifier_id)
-                ),
+                actor_id=verifier_id,
                 scheduled_for=None,
                 expires_at=None,
                 in_app_enabled=True,

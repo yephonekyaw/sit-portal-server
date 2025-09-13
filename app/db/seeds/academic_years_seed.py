@@ -5,6 +5,7 @@ from sqlalchemy import delete
 
 from app.db.models import AcademicYear
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import from_bangkok_to_naive_utc
 
 logger = get_logger()
 
@@ -19,12 +20,9 @@ def seed_academic_years(db_session: Session):
     academic_years = []
     for year in range(2000, 2051):
         # August 1 start date, May 31 end date (next year)
-        start_date = datetime(
-            year, 8, 1, 0, 0, 0
-        )  # Remove timezone for MSSQL compatibility
-        end_date = datetime(
-            year + 1, 5, 31, 23, 59, 59
-        )  # Remove timezone for MSSQL compatibility
+
+        start_date = from_bangkok_to_naive_utc(datetime(year, 8, 1, 0, 0, 0))
+        end_date = from_bangkok_to_naive_utc(datetime(year + 1, 5, 31, 23, 59, 59))
 
         # Current academic year
         is_current = year == 2024

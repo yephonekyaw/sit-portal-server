@@ -1,5 +1,4 @@
 from typing import Annotated, List
-import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
@@ -98,7 +97,7 @@ async def create_program_requirement(
 async def archive_program_requirement(
     request: Request,
     requirement_id: Annotated[
-        uuid.UUID, Path(description="Program requirement ID to archive")
+        str, Path(description="Program requirement ID to archive")
     ],
     requirement_service: ProgramRequirementService = Depends(
         get_program_requirement_service
@@ -133,7 +132,7 @@ async def archive_program_requirement(
 async def update_program_requirement(
     request: Request,
     requirement_id: Annotated[
-        uuid.UUID, Path(description="Program requirement ID to update")
+        str, Path(description="Program requirement ID to update")
     ],
     requirement_data: UpdateProgramRequirementRequest,
     requirement_service: ProgramRequirementService = Depends(

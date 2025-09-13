@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 from typing import Any, List, Dict
-import uuid
 import asyncio
 
 from sqlalchemy.orm import Session
@@ -18,6 +17,7 @@ from app.services.notifications.utils import (
     create_notification_sync,
 )
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -52,7 +52,7 @@ async def _async_daily_requirement_notifier(request_id: str):
 
     for db_session in get_sync_session():
         try:
-            current_datetime = datetime.now()
+            current_datetime = naive_utc_now()
 
             # Get all requirement schedules that might need notifications
             eligible_schedules = await _get_eligible_requirement_schedules(
@@ -273,7 +273,7 @@ def _should_send_notification(
 
 
 async def _update_last_notified_at(
-    db_session: Session, schedule_id: uuid.UUID, current_datetime: datetime
+    db_session: Session, schedule_id: str, current_datetime: datetime
 ):
     """Update the last_notified_at timestamp for a schedule."""
     db_session.execute(

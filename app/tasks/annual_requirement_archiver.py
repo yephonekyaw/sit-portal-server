@@ -9,6 +9,7 @@ from app.celery import celery
 from app.db.session import get_sync_session
 from app.db.models import ProgramRequirement
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import utc_now
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -38,10 +39,10 @@ def annual_requirement_archiver_task(self, request_id: str):
 async def _async_annual_requirement_archiver(request_id: str):
     logger = get_logger().bind(request_id=request_id)
 
-    # Get async database session
+    # Get database session
     for db_session in get_sync_session():
         try:
-            current_datetime = datetime.now()
+            current_datetime = utc_now()
             current_academic_year = _calculate_current_academic_year(current_datetime)
 
             logger.info(

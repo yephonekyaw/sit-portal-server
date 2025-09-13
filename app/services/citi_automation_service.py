@@ -1,6 +1,5 @@
 import asyncio
 import re
-from uuid import UUID
 from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
 from sqlalchemy import select
@@ -145,7 +144,7 @@ class CitiProgramAutomationService:
                 )
                 .join(Student, CertificateSubmission.student_id == Student.id)
                 .join(User, Student.user_id == User.id)
-                .where(CertificateSubmission.id == UUID(submission_id))
+                .where(CertificateSubmission.id == submission_id)
             )
 
             row = result.first()

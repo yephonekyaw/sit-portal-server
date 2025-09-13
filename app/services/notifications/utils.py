@@ -1,6 +1,5 @@
-from typing import List, Optional, cast
+from typing import List, Optional
 from datetime import datetime
-import uuid
 
 from sqlalchemy import and_, or_
 from sqlalchemy.orm import selectinload, Session
@@ -23,8 +22,8 @@ logger = get_logger()
 
 
 async def get_student_user_ids_for_requirement_schedule(
-    db: Session, requirement_schedule_id: uuid.UUID
-) -> List[uuid.UUID]:
+    db: Session, requirement_schedule_id: str
+) -> List[str]:
     """
     Get user IDs of students who haven't submitted or whose submissions
     are not yet approved for a specific program requirement schedule.
@@ -105,7 +104,7 @@ async def get_student_user_ids_for_requirement_schedule(
 
 async def get_staff_user_ids_by_program_and_role(
     db: Session, program_code: str, role_name: Optional[str] = None
-) -> List[uuid.UUID]:
+) -> List[str]:
     """
     Get user IDs of staff members responsible for a particular program
     and who have certain permissions/roles.
@@ -151,7 +150,7 @@ async def get_staff_user_ids_by_program_and_role(
             + (f" with role {role_name}" if role_name else "")
         )
 
-        return cast(List[uuid.UUID], staff_user_ids)
+        return staff_user_ids
 
     except Exception as e:
         logger.error(
@@ -163,7 +162,7 @@ async def get_staff_user_ids_by_program_and_role(
 
 async def get_user_id_from_student_identifier(
     db: Session, identifier: str
-) -> Optional[uuid.UUID]:
+) -> Optional[str]:
     """
     Get user_id from student identifier (student ID, student_id, or sit_email).
 
@@ -177,12 +176,11 @@ async def get_user_id_from_student_identifier(
     try:
         # Try to parse as UUID first (student.id)
         try:
-            student_uuid = uuid.UUID(identifier)
-            stmt = select(Student.user_id).where(Student.id == student_uuid)
+            stmt = select(Student.user_id).where(Student.id == identifier)
             result = db.execute(stmt)
             user_id = result.scalar_one_or_none()
             if user_id:
-                return cast(uuid.UUID, user_id)
+                return user_id
         except ValueError:
             pass
 
@@ -199,7 +197,7 @@ async def get_user_id_from_student_identifier(
         else:
             logger.warning(f"No student found for identifier {identifier}")
 
-        return cast(uuid.UUID, user_id)
+        return user_id
 
     except Exception as e:
         logger.error(
@@ -211,7 +209,7 @@ async def get_user_id_from_student_identifier(
 
 async def get_user_id_from_staff_identifier(
     db: Session, identifier: str
-) -> Optional[uuid.UUID]:
+) -> Optional[str]:
     """
     Get user_id from staff identifier (staff ID or employee_id).
 
@@ -225,12 +223,11 @@ async def get_user_id_from_staff_identifier(
     try:
         # Try to parse as UUID first (staff.id)
         try:
-            staff_uuid = uuid.UUID(identifier)
-            stmt = select(Staff.user_id).where(Staff.id == staff_uuid)
+            stmt = select(Staff.user_id).where(Staff.id == identifier)
             result = db.execute(stmt)
             user_id = result.scalar_one_or_none()
             if user_id:
-                return cast(uuid.UUID, user_id)
+                return user_id
         except ValueError:
             pass
 
@@ -244,7 +241,7 @@ async def get_user_id_from_staff_identifier(
         else:
             logger.warning(f"No staff found for identifier {identifier}")
 
-        return cast(uuid.UUID, user_id)
+        return user_id
 
     except Exception as e:
         logger.error(
@@ -257,10 +254,10 @@ async def get_user_id_from_staff_identifier(
 def create_notification_sync(
     request_id: str,
     notification_code: str,
-    entity_id: uuid.UUID,
+    entity_id: str,
     actor_type: str,
-    recipient_ids: List[uuid.UUID],
-    actor_id: Optional[uuid.UUID] = None,
+    recipient_ids: List[str],
+    actor_id: Optional[str] = None,
     scheduled_for: Optional[datetime] = None,
     expires_at: Optional[datetime] = None,
     in_app_enabled: bool = True,
@@ -294,12 +291,12 @@ def create_notification_sync(
         task_args = {
             "request_id": request_id,
             "notification_code": notification_code,
-            "entity_id": str(entity_id),
+            "entity_id": entity_id,
             "actor_type": actor_type,
-            "recipient_ids": [str(rid) for rid in recipient_ids],
-            "actor_id": str(actor_id) if actor_id else None,
-            "scheduled_for": scheduled_for.isoformat() if scheduled_for else None,
-            "expires_at": expires_at.isoformat() if expires_at else None,
+            "recipient_ids": recipient_ids,
+            "actor_id": actor_id,
+            "scheduled_for": scheduled_for,
+            "expires_at": expires_at,
             "in_app_enabled": in_app_enabled,
             "line_app_enabled": line_app_enabled,
             **metadata,

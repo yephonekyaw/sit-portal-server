@@ -1,5 +1,7 @@
 from typing import Optional
-from datetime import datetime, date
+from datetime import date
+
+from app.utils.datetime_utils import naive_utc_now
 
 
 class DeadlineCalculator:
@@ -11,7 +13,7 @@ class DeadlineCalculator:
         if not deadline_date:
             return 0
 
-        now = datetime.now().date()
+        now = naive_utc_now().date()
         diff = (deadline_date - now).days
         return max(0, diff)
 
@@ -21,7 +23,7 @@ class DeadlineCalculator:
         if not deadline_date:
             return 0
 
-        now = datetime.now().date()
+        now = naive_utc_now().date()
         diff = (now - deadline_date).days
         return max(0, diff)
 
@@ -31,7 +33,7 @@ class DeadlineCalculator:
         if not grace_period_date:
             return 0
 
-        now = datetime.now().date()
+        now = naive_utc_now().date()
         diff = (now - grace_period_date).days
         return max(0, diff)  # Return positive number of days overdue
 
@@ -41,4 +43,4 @@ class DeadlineCalculator:
         if not deadline_date:
             return False
 
-        return datetime.now().date() > deadline_date
+        return naive_utc_now().date() > deadline_date

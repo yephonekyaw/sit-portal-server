@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 from pydantic import Field
-import uuid
+from uuid import UUID
 
 from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 
@@ -9,7 +9,7 @@ from app.schemas.camel_base_model import CamelCaseBaseModel as BaseModel
 class GetCertificatesItem(BaseModel):
     """Response schema for certificate type with counts"""
 
-    id: uuid.UUID = Field(..., description="Certificate type ID")
+    id: str | UUID = Field(..., description="Certificate type ID")
     cert_code: str = Field(..., description="Certificate type code")
     cert_name: str = Field(..., description="Certificate type name")
     description: str = Field(..., description="Certificate type description")
@@ -34,7 +34,7 @@ class GetCertificatesItem(BaseModel):
 class UpdateCertificateRequest(BaseModel):
     """Request schema for updating a certificate type"""
 
-    id: uuid.UUID = Field(..., description="Certificate type ID")
+    id: str | UUID = Field(..., description="Certificate type ID")
     cert_code: str = Field(
         ..., min_length=1, max_length=50, description="Certificate type code"
     )

@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
 
@@ -8,6 +7,7 @@ from app.db.models import (
     ProgramRequirementSchedule,
 )
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 logger = get_logger()
 
@@ -67,7 +67,7 @@ def seed_dashboard_stats(db_session: Session):
         overdue_count=overdue_count,
         manual_verification_count=manual_verification_count,
         agent_verification_count=agent_verification_count,
-        last_calculated_at=datetime.now(),
+        last_calculated_at=naive_utc_now(),
     )
 
     db_session.add(dashboard_stats)

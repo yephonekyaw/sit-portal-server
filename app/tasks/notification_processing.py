@@ -1,6 +1,4 @@
-import uuid
 import asyncio
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -9,6 +7,7 @@ from app.celery import celery
 from app.db.session import get_sync_session
 from app.db.models import Notification, NotificationStatus
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=30)
@@ -38,7 +37,7 @@ async def _async_process_notification(request_id: str, notification_id: str):
                     selectinload(Notification.recipients),
                     selectinload(Notification.notification_type),
                 )
-                .where(Notification.id == uuid.UUID(notification_id))
+                .where(Notification.id == notification_id)
             )
             notification = result.scalar_one_or_none()
 
@@ -52,9 +51,7 @@ async def _async_process_notification(request_id: str, notification_id: str):
                 }
 
             # Check if notification has expired
-            if notification.expires_at and notification.expires_at <= datetime.now(
-                timezone.utc
-            ):
+            if notification.expires_at and notification.expires_at <= naive_utc_now():
 
                 # Mark all pending recipients as expired
                 for recipient in notification.recipients:
@@ -80,7 +77,7 @@ async def _async_process_notification(request_id: str, notification_id: str):
                     # For now, in-app notifications are immediately marked as delivered
                     # since they're just stored in the database
                     recipient.status = NotificationStatus.DELIVERED
-                    recipient.delivered_at = datetime.now()
+                    recipient.delivered_at = naive_utc_now()
                     tasks_created += 1
 
                 if recipient.line_app_enabled:

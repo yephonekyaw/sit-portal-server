@@ -1,5 +1,4 @@
 from typing import Dict, Any
-import uuid
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -58,7 +57,7 @@ class ProgramRequirementScheduleNotificationService(BaseNotificationService):
         }
 
     async def get_notification_data(
-        self, entity_id: uuid.UUID, notification_id: uuid.UUID
+        self, entity_id: str, notification_id: str
     ) -> Dict[str, Any]:
         """Get program requirement schedule data for all notification types"""
         try:

@@ -1,5 +1,4 @@
 from typing import Annotated, List, cast
-import uuid
 
 from fastapi import APIRouter, Depends, Request, status, Path
 
@@ -18,8 +17,6 @@ from app.utils.error_handlers import handle_service_error
 from app.middlewares.auth_middleware import require_staff
 
 certificates_router = APIRouter(dependencies=[Depends(require_staff)])
-
-
 
 
 # API Endpoints
@@ -63,9 +60,7 @@ async def get_all_certificate_types(
 )
 async def update_certificate_type(
     request: Request,
-    certificate_id: Annotated[
-        uuid.UUID, Path(description="Certificate type ID to update")
-    ],
+    certificate_id: Annotated[str, Path(description="Certificate type ID to update")],
     certificate_data: UpdateCertificateRequest,
     certificate_service: CertificateService = Depends(get_certificate_service),
 ):
@@ -100,9 +95,7 @@ async def update_certificate_type(
 )
 async def archive_certificate_type(
     request: Request,
-    certificate_id: Annotated[
-        uuid.UUID, Path(description="Certificate type ID to archive")
-    ],
+    certificate_id: Annotated[str, Path(description="Certificate type ID to archive")],
     certificate_service: CertificateService = Depends(get_certificate_service),
 ):
     """Archive a certificate type and all its active requirements"""

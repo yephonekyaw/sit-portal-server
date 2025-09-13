@@ -1,10 +1,10 @@
 import uuid
-from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import delete, select
 
 from app.db.models import StaffPermission, Staff, Permission, User
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 logger = get_logger()
 
@@ -43,7 +43,7 @@ def seed_staff_permissions(db_session: Session):
             permission_id=permission.id,
             is_active=True,
             assigned_by=None,  # System assigned
-            assigned_at=datetime.now(),
+            assigned_at=naive_utc_now(),
             expires_at=None,  # Never expires
         )
         staff_permissions.append(staff_permission)

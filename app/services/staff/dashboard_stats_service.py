@@ -1,5 +1,4 @@
 import uuid
-from datetime import datetime
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -16,6 +15,7 @@ from app.db.session import get_sync_session
 from app.schemas.staff.dashboard_stats_schemas import DashboardStatsResponse
 from app.services.staff.student_service import get_student_service
 from app.utils.logging import get_logger
+from app.utils.datetime_utils import naive_utc_now
 
 logger = get_logger()
 
@@ -74,7 +74,7 @@ class DashboardStatsService:
         dashboard_stats.overdue_count += overdue_count_delta
         dashboard_stats.manual_verification_count += manual_verification_count_delta
         dashboard_stats.agent_verification_count += agent_verification_count_delta
-        dashboard_stats.last_calculated_at = datetime.now()
+        dashboard_stats.last_calculated_at = naive_utc_now()
 
         self.db.commit()
         self.db.refresh(dashboard_stats)
@@ -143,7 +143,7 @@ class DashboardStatsService:
         )
 
     def get_dashboard_stats_by_schedule(
-        self, requirement_schedule_id: uuid.UUID
+        self, requirement_schedule_id: str
     ) -> DashboardStatsResponse:
         """
         Get dashboard stats by requirement schedule ID.
@@ -195,7 +195,7 @@ class DashboardStatsService:
         return dashboard_stats_response
 
     async def create_dashboard_stats_by_schedule_id(
-        self, schedule_id: uuid.UUID
+        self, schedule_id: str
     ) -> DashboardStats:
         """
         Create dashboard stats for a given schedule ID by automatically determining
@@ -270,7 +270,7 @@ class DashboardStatsService:
             overdue_count=0,
             manual_verification_count=0,
             agent_verification_count=0,
-            last_calculated_at=datetime.now(),
+            last_calculated_at=naive_utc_now(),
         )
 
         self.db.add(dashboard_stats)
