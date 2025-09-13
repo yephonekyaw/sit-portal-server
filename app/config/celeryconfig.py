@@ -79,6 +79,12 @@ beat_schedule = {
         "schedule": crontab(hour=3, minute=0, day_of_month="*/15"),
         "args": ("line_token_manager_cron",),
     },
+    # Test cron reporter - Every 2 minutes
+    "cron-reporter-test": {
+        "task": "app.tasks.cron_reporter.cron_reporter_task",
+        "schedule": crontab(minute="*/2"),
+        "args": ("cron_reporter_test_job",),
+    },
 }
 
 # Default Queue

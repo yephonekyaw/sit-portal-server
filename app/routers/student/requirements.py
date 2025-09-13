@@ -1,4 +1,5 @@
-from typing import List, Annotated, cast
+from typing import List, Annotated, Union, cast
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Form, Path, status
 from sqlalchemy.orm import Session
@@ -30,6 +31,7 @@ from app.services.notifications.utils import (
     get_staff_user_ids_by_program_and_role,
     create_notification_sync,
 )
+from app.utils.string_utils import to_str
 
 logger = get_logger()
 requirement_router = APIRouter()
@@ -86,7 +88,7 @@ async def submit_student_certificate(
         deltas = timing_deltas.get(cast(str, submission_response.submission_timing), {})
 
         await dashboard_stats_service.update_dashboard_stats_by_schedule(
-            requirement_schedule_id=submission_response.schedule_id, **deltas
+            requirement_schedule_id=to_str(submission_response.schedule_id), **deltas
         )
 
         # Create notifications for staff
@@ -99,7 +101,7 @@ async def submit_student_certificate(
         create_notification_sync(
             request_id=str(request.state.request_id),
             notification_code="certificate_submission_submit",
-            entity_id=submission_response.submission_id,
+            entity_id=to_str(cast(Union[str, UUID], submission_response.submission_id)),
             actor_type="user",
             recipient_ids=staff_user_ids,
             actor_id=current_user.user_id,
@@ -110,7 +112,9 @@ async def submit_student_certificate(
         )
 
         # Call celery verification task
-        verify_certificate_task.delay(request.state.request_id, submission_response.submission_id)  # type: ignore
+        verify_certificate_task.delay(
+            request.state.request_id, submission_response.submission_id
+        )
 
         return ResponseBuilder.success(
             request=request,

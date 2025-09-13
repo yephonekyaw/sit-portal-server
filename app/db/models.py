@@ -1,3 +1,4 @@
+import enum
 from typing import List, Optional
 from datetime import datetime, date
 from sqlalchemy import (
@@ -14,9 +15,9 @@ from sqlalchemy import (
     CheckConstraint,
     Date,
 )
-from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER, DATETIME2
+from sqlalchemy.dialects.mssql import DATETIME2
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-import enum
+from .custom_types import StringUUID
 
 
 class Base(DeclarativeBase):
@@ -105,11 +106,35 @@ class AuditMixin:
 
 
 # Models
+class CronReport(Base, AuditMixin):
+    __tablename__ = "cron_reports"
+
+    id: Mapped[str] = mapped_column(
+        StringUUID,
+        primary_key=True,
+        server_default=func.newid(),
+    )
+    job_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    run_at: Mapped[datetime] = mapped_column(
+        DATETIME2, server_default=func.getutcdate(), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    message: Mapped[Optional[str]] = mapped_column(Text)
+    details: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Constraints
+    __table_args__ = (
+        Index("idx_cron_reports_job_name", "job_name"),
+        Index("idx_cron_reports_run_at", "run_at"),
+        Index("idx_cron_reports_status", "status"),
+    )
+
+
 class User(Base, AuditMixin):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -149,7 +174,7 @@ class Role(Base, AuditMixin):
     __tablename__ = "roles"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -169,7 +194,7 @@ class AcademicYear(Base, AuditMixin):
     __tablename__ = "academic_years"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -202,7 +227,7 @@ class CertificateType(Base, AuditMixin):
     __tablename__ = "certificate_types"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -235,7 +260,7 @@ class NotificationType(Base, AuditMixin):
     __tablename__ = "notification_types"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -298,7 +323,7 @@ class Program(Base, AuditMixin):
     __tablename__ = "programs"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
@@ -332,17 +357,17 @@ class ProgramRequirement(Base, AuditMixin):
     __tablename__ = "program_requirements"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     program_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("programs.id", ondelete="NO ACTION"),
         nullable=False,
     )
     cert_type_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("certificate_types.id", ondelete="NO ACTION"),
         nullable=False,
     )
@@ -408,17 +433,17 @@ class ProgramRequirementSchedule(Base, AuditMixin):
     __tablename__ = "program_requirement_schedules"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     program_requirement_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("program_requirements.id", ondelete="CASCADE"),
         nullable=False,
     )
     academic_year_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
@@ -458,12 +483,12 @@ class Staff(Base, AuditMixin):
     __tablename__ = "staff"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     user_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,  # One-to-one relationship
         nullable=False,
@@ -494,17 +519,17 @@ class Permission(Base, AuditMixin):
     __tablename__ = "permissions"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     program_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("programs.id", ondelete="NO ACTION"),
         nullable=False,
     )
     role_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False
+        StringUUID, ForeignKey("roles.id", ondelete="CASCADE"), nullable=False
     )
 
     # Relationships
@@ -526,21 +551,21 @@ class StaffPermission(Base, AuditMixin):
     __tablename__ = "staff_permissions"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     staff_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER, ForeignKey("staff.id", ondelete="NO ACTION"), nullable=False
+        StringUUID, ForeignKey("staff.id", ondelete="NO ACTION"), nullable=False
     )
     permission_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("permissions.id", ondelete="NO ACTION"),
         nullable=False,
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     assigned_by: Mapped[Optional[str]] = mapped_column(
-        UNIQUEIDENTIFIER, ForeignKey("staff.id", ondelete="SET NULL")
+        StringUUID, ForeignKey("staff.id", ondelete="SET NULL")
     )
     assigned_at: Mapped[datetime] = mapped_column(
         DATETIME2, server_default=func.getutcdate(), nullable=False
@@ -574,12 +599,12 @@ class Student(Base, AuditMixin):
     __tablename__ = "students"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     user_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("users.id", ondelete="CASCADE"),
         unique=True,  # One-to-one relationship
         nullable=False,
@@ -587,17 +612,17 @@ class Student(Base, AuditMixin):
     sit_email: Mapped[str] = mapped_column(String(320), unique=True, nullable=False)
     student_id: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     program_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("programs.id", ondelete="NO ACTION"),
         nullable=False,
     )
     academic_year_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
     line_application_id: Mapped[Optional[str]] = mapped_column(
-        UNIQUEIDENTIFIER, unique=True, server_default=func.newid()
+        StringUUID, unique=True, server_default=func.newid()
     )
     enrollment_status: Mapped[EnrollmentStatus] = mapped_column(
         Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False
@@ -625,22 +650,22 @@ class CertificateSubmission(Base, AuditMixin):
     __tablename__ = "certificate_submissions"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     student_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("students.id", ondelete="CASCADE"),
         nullable=False,
     )
     cert_type_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("certificate_types.id", ondelete="NO ACTION"),
         nullable=False,
     )
     requirement_schedule_id: Mapped[Optional[str]] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("program_requirement_schedules.id", ondelete="SET NULL"),
     )
     file_object_name: Mapped[str] = mapped_column(String(500), nullable=False)
@@ -702,16 +727,16 @@ class VerificationHistory(Base, AuditMixin):
     __tablename__ = "verification_history"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     submission_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("certificate_submissions.id", ondelete="CASCADE"),
         nullable=False,
     )
-    verifier_id: Mapped[Optional[str]] = mapped_column(UNIQUEIDENTIFIER)
+    verifier_id: Mapped[Optional[str]] = mapped_column(StringUUID)
     verification_type: Mapped[VerificationType] = mapped_column(
         Enum(VerificationType), nullable=False
     )
@@ -745,18 +770,18 @@ class Notification(Base, AuditMixin):
     __tablename__ = "notifications"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     notification_type_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("notification_types.id", ondelete="NO ACTION"),
         nullable=False,
     )
-    entity_id: Mapped[str] = mapped_column(UNIQUEIDENTIFIER, nullable=False)
+    entity_id: Mapped[str] = mapped_column(StringUUID, nullable=False)
     actor_type: Mapped[ActorType] = mapped_column(Enum(ActorType), nullable=False)
-    actor_id: Mapped[Optional[str]] = mapped_column(UNIQUEIDENTIFIER)
+    actor_id: Mapped[Optional[str]] = mapped_column(StringUUID)
     priority: Mapped[Priority] = mapped_column(
         Enum(Priority), default=Priority.MEDIUM, nullable=False
     )
@@ -796,12 +821,12 @@ class NotificationChannelTemplate(Base, AuditMixin):
     __tablename__ = "notification_channel_templates"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     notification_type_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("notification_types.id", ondelete="CASCADE"),
         nullable=False,
     )
@@ -835,17 +860,17 @@ class NotificationRecipient(Base, AuditMixin):
     __tablename__ = "notification_recipients"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     notification_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("notifications.id", ondelete="CASCADE"),
         nullable=False,
     )
     recipient_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+        StringUUID, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
     )
     in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     line_app_enabled: Mapped[bool] = mapped_column(
@@ -872,10 +897,6 @@ class NotificationRecipient(Base, AuditMixin):
             name="uq_notif_recip_notif_recip",
         ),
         CheckConstraint(
-            "delivered_at IS NULL OR delivered_at >= created_at",
-            name="ck_notif_recip_delivered_after_created",
-        ),
-        CheckConstraint(
             "read_at IS NULL OR read_at >= delivered_at",
             name="ck_notif_recip_read_after_delivered",
         ),
@@ -891,27 +912,27 @@ class DashboardStats(Base, AuditMixin):
     __tablename__ = "dashboard_stats"
 
     id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         primary_key=True,
         server_default=func.newid(),
     )
     requirement_schedule_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("program_requirement_schedules.id", ondelete="NO ACTION"),
         nullable=False,
     )
     program_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("programs.id", ondelete="NO ACTION"),
         nullable=False,
     )
     academic_year_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
     cert_type_id: Mapped[str] = mapped_column(
-        UNIQUEIDENTIFIER,
+        StringUUID,
         ForeignKey("certificate_types.id", ondelete="NO ACTION"),
         nullable=False,
     )

@@ -20,6 +20,12 @@ from app.db.models import (
     VerificationType,
 )
 from app.schemas.citi_template_schemas import CitiValidationResponse, ValidationDecision
+from app.services.notifications.utils import create_notification_sync
+from app.services.staff.dashboard_stats_service import (
+    DashboardStatsService,
+    get_dashboard_stats_service,
+)
+from app.db.session import get_sync_session
 
 logger = get_logger()
 
@@ -90,7 +96,7 @@ class CitiProgramAutomationService:
                     await asyncio.sleep(5)  # Wait for PDF capture
 
                 except PlaywrightError as e:
-                    if "net::ERR_ABORTED" in str(e):
+                    if "net::ERR_ABORTED" in str(e) or "Download is starting" in str(e):
                         logger.warning(
                             "Request aborted - this may be expected behavior in headless mode"
                         )
@@ -132,33 +138,34 @@ class CitiProgramAutomationService:
         return extraction_result
 
     async def _get_submission_data(
-        self, db_session: Session, submission_id: str
+        self, submission_id: str
     ) -> Optional[Dict[str, Any]]:
         """Retrieve certificate submission with related data."""
         try:
-            result = db_session.execute(
-                select(CertificateSubmission, CertificateType, Student, User)
-                .join(
-                    CertificateType,
-                    CertificateSubmission.cert_type_id == CertificateType.id,
+            for db_session in get_sync_session():
+                result = db_session.execute(
+                    select(CertificateSubmission, CertificateType, Student, User)
+                    .join(
+                        CertificateType,
+                        CertificateSubmission.cert_type_id == CertificateType.id,
+                    )
+                    .join(Student, CertificateSubmission.student_id == Student.id)
+                    .join(User, Student.user_id == User.id)
+                    .where(CertificateSubmission.id == submission_id)
                 )
-                .join(Student, CertificateSubmission.student_id == Student.id)
-                .join(User, Student.user_id == User.id)
-                .where(CertificateSubmission.id == submission_id)
-            )
 
-            row = result.first()
-            if not row:
-                return None
+                row = result.first()
+                if not row:
+                    return None
 
-            submission, cert_type, student, user = row
-            return {
-                "submission": submission,
-                "cert_type": cert_type,
-                "student": student,
-                "user": user,
-                "student_name": f"{user.first_name} {user.last_name}",
-            }
+                submission, cert_type, student, user = row
+                return {
+                    "submission": submission,
+                    "cert_type": cert_type,
+                    "student": student,
+                    "user": user,
+                    "student_name": f"{user.first_name} {user.last_name}",
+                }
         except Exception as e:
             logger.error(f"Failed to retrieve submission data: {submission_id} - {e}")
             return None
@@ -243,55 +250,123 @@ class CitiProgramAutomationService:
 
     async def _save_verification_results(
         self,
-        db_session: Session,
         submission: CertificateSubmission,
         llm_response: CitiValidationResponse,
-    ) -> bool:
+    ):
         """Save verification results to database."""
         try:
-            old_status = submission.submission_status
-            new_status = self._map_validation_to_status(
-                llm_response.validation_decision
-            )
+            for db_session in get_sync_session():
+                old_status = submission.submission_status
+                new_status = self._map_validation_to_status(
+                    llm_response.validation_decision
+                )
 
-            # Update submission
-            submission.submission_status = new_status
-            submission.agent_confidence_score = llm_response.overall_score.value / 100.0
+                # Update submission record
+                submission = db_session.get_one(CertificateSubmission, submission.id)
+                submission.submission_status = new_status
+                submission.agent_confidence_score = (
+                    llm_response.overall_score.value / 100.0
+                )
 
-            # Create verification history
-            comments, reasons = self._extract_verification_comments(llm_response)
-            verification_history = VerificationHistory(
-                submission_id=submission.id,
-                verifier_id=None,
-                verification_type=VerificationType.AGENT,
-                old_status=old_status,
-                new_status=new_status,
-                comments=comments,
-                reasons=reasons,
-                agent_analysis_result=llm_response.model_dump_json(indent=2),
-            )
+                db_session.flush()
 
-            db_session.add(verification_history)
-            db_session.commit()
+                # Create verification history
+                comments, reasons = self._extract_verification_comments(llm_response)
+                verification_history = VerificationHistory(
+                    submission_id=submission.id,
+                    verifier_id=None,
+                    verification_type=VerificationType.AGENT,
+                    old_status=old_status,
+                    new_status=new_status,
+                    comments=comments,
+                    reasons=reasons,
+                    agent_analysis_result=llm_response.model_dump_json(indent=2),
+                )
 
-            logger.info(
-                f"Verification saved: {submission.id} - {old_status.value} → {new_status.value}"
-            )
-            return True
+                db_session.add(verification_history)
+                db_session.commit()
+
+                logger.info(
+                    f"Verification saved: {submission.id} - {old_status.value} → {new_status.value}"
+                )
+                return True
 
         except Exception as e:
             logger.error(f"Failed to save verification: {submission.id} - {e}")
             return False
 
+    async def _update_dashboard_stats(
+        self, schedule_id: str, decision: ValidationDecision
+    ) -> None:
+        """Update dashboard statistics based on the validation decision."""
+        for db_session in get_sync_session():
+            dashboard_stats_service: DashboardStatsService = (
+                get_dashboard_stats_service(db_session)
+            )
+
+            decision_deltas = {
+                ValidationDecision.APPROVE: {
+                    "approved_count_delta": 1,
+                    "pending_count_delta": -1,
+                    "agent_verification_count_delta": 1,
+                },
+                ValidationDecision.REJECT: {
+                    "rejected_count_delta": 1,
+                    "pending_count_delta": -1,
+                },
+                ValidationDecision.MANUAL_REVIEW: {
+                    "manual_review_count_delta": 1,
+                    "pending_count_delta": -1,
+                },
+            }
+
+            deltas = decision_deltas[decision]
+            if deltas:
+                await dashboard_stats_service.update_dashboard_stats_by_schedule(
+                    requirement_schedule_id=schedule_id, **deltas
+                )
+            logger.info(f"Dashboard stats updated for schedule {schedule_id}")
+
+    async def _notify(
+        self,
+        request_id: str,
+        student: Student,
+        submission: CertificateSubmission,
+        decision: ValidationDecision,
+    ) -> None:
+        """Placeholder for notification logic."""
+        notification_codes = {
+            ValidationDecision.APPROVE: "certificate_submission_verify",
+            ValidationDecision.REJECT: "certificate_submission_reject",
+            ValidationDecision.MANUAL_REVIEW: "certificate_submission_request",
+        }
+
+        create_notification_sync(
+            request_id=request_id,
+            notification_code=notification_codes[decision],
+            entity_id=submission.id,
+            actor_type="system",
+            recipient_ids=[student.user_id],
+            actor_id=None,
+            scheduled_for=None,
+            expires_at=None,
+            in_app_enabled=True,
+            line_app_enabled=False,
+        )
+
+        logger.info(
+            f"Notification sent to student {student.id} for submission {submission.id}"
+        )
+
     async def verify_certificate_submission(
-        self, db_session: Session, request_id: str, submission_id: str
+        self, request_id: str, submission_id: str
     ) -> Dict[str, Any]:
         """Main method to verify certificate submission end-to-end."""
         logger.info(f"Starting verification workflow: {submission_id}")
 
         try:
             # Get submission data
-            submission_data = await self._get_submission_data(db_session, submission_id)
+            submission_data = await self._get_submission_data(submission_id)
             if not submission_data:
                 return {"success": False, "error": "Submission not found"}
 
@@ -360,13 +435,25 @@ class CitiProgramAutomationService:
                 return {"success": False, "error": "LLM verification failed"}
 
             # Save results
-            if not await self._save_verification_results(
-                db_session, submission, llm_response
-            ):
+            if not await self._save_verification_results(submission, llm_response):
                 return {
                     "success": False,
                     "error": "Failed to save verification results",
                 }
+
+            # Update dashboard stats
+            await self._update_dashboard_stats(
+                submission.requirement_schedule_id,
+                llm_response.validation_decision,
+            )
+
+            # Send notifications
+            await self._notify(
+                request_id,
+                submission_data["student"],
+                submission,
+                llm_response.validation_decision,
+            )
 
             logger.info(
                 f"Verification completed: {submission_id} - {llm_response.validation_decision}"

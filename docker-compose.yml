@@ -58,24 +58,24 @@ services:
     networks:
       - sit-portal-network
 
-  # celery-beat:
-  #   build:
-  #     context: .
-  #     dockerfile: docker/Dockerfile.celery
-  #   container_name: sit-portal-beat
-  #   restart: unless-stopped
-  #   command: celery -A app.celery beat --loglevel=info
-  #   env_file:
-  #     - .env
-  #   volumes:
-  #     - ./logs:/server/logs
-  #   depends_on:
-  #     redis:
-  #       condition: service_healthy
-  #     api:
-  #       condition: service_healthy
-  #   networks:
-  #     - sit-portal-network
+  celery-beat:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.celery
+    container_name: sit-portal-beat
+    restart: unless-stopped
+    command: celery -A app.celery beat --loglevel=info
+    env_file:
+      - .env
+    volumes:
+      - ./logs:/server/logs
+    depends_on:
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    networks:
+      - sit-portal-network
 
 volumes:
   sit-portal-volume:
