@@ -12,10 +12,9 @@ from sqlalchemy import (
     func,
     UniqueConstraint,
     CheckConstraint,
-    DateTime,
     Date,
 )
-from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER
+from sqlalchemy.dialects.mssql import UNIQUEIDENTIFIER, DATETIME2
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 import enum
 
@@ -98,10 +97,10 @@ class AuditMixin:
     """Mixin for common audit fields"""
 
     created_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.getutcdate(), nullable=False
+        DATETIME2, server_default=func.getutcdate(), nullable=False
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.getutcdate(), onupdate=func.getutcdate()
+        DATETIME2, server_default=func.getutcdate(), onupdate=func.getutcdate()
     )
 
 
@@ -125,7 +124,7 @@ class User(Base, AuditMixin):
     access_token_version: Mapped[int] = mapped_column(
         Integer, default=0, nullable=False
     )
-    last_login: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    last_login: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Relationships
     student: Mapped[Optional["Student"]] = relationship(
@@ -175,8 +174,8 @@ class AcademicYear(Base, AuditMixin):
         server_default=func.newid(),
     )
     year_code: Mapped[int] = mapped_column(Integer, unique=True, nullable=False)
-    start_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    end_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    start_date: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
+    end_date: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
     is_current: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # Relationships
@@ -278,10 +277,10 @@ class LineChannelAccessToken(Base, AuditMixin):
         String(20), default="Bearer", nullable=False
     )
     expires_in: Mapped[int] = mapped_column(Integer, nullable=False)  # seconds
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     is_revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Constraints
     __table_args__ = (
@@ -360,7 +359,7 @@ class ProgramRequirement(Base, AuditMixin):
         nullable=False,
     )
     last_recurrence_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.getutcdate(), nullable=False
+        DATETIME2, server_default=func.getutcdate(), nullable=False
     )
     notification_days_before_deadline: Mapped[int] = mapped_column(
         Integer, default=90, nullable=False
@@ -423,10 +422,10 @@ class ProgramRequirementSchedule(Base, AuditMixin):
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
-    submission_deadline: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    grace_period_deadline: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    start_notify_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    last_notified_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+    submission_deadline: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
+    grace_period_deadline: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
+    start_notify_at: Mapped[datetime] = mapped_column(DATETIME2, nullable=False)
+    last_notified_at: Mapped[datetime] = mapped_column(DATETIME2, nullable=True)
 
     # Relationships
     program_requirement: Mapped["ProgramRequirement"] = relationship(
@@ -544,9 +543,9 @@ class StaffPermission(Base, AuditMixin):
         UNIQUEIDENTIFIER, ForeignKey("staff.id", ondelete="SET NULL")
     )
     assigned_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.getutcdate(), nullable=False
+        DATETIME2, server_default=func.getutcdate(), nullable=False
     )
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Relationships
     staff: Mapped["Staff"] = relationship(
@@ -656,9 +655,9 @@ class CertificateSubmission(Base, AuditMixin):
         Enum(SubmissionTiming), default=SubmissionTiming.ON_TIME, nullable=False
     )
     submitted_at: Mapped[datetime] = mapped_column(
-        DateTime, server_default=func.getutcdate(), nullable=False
+        DATETIME2, server_default=func.getutcdate(), nullable=False
     )
-    expired_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    expired_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Relationships
     student: Mapped["Student"] = relationship(back_populates="certificate_submissions")
@@ -763,8 +762,8 @@ class Notification(Base, AuditMixin):
     )
     # JSON stored as Text - serialize/deserialize in application
     notification_metadata: Mapped[Optional[str]] = mapped_column(Text)
-    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    scheduled_for: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Relationships
     notification_type: Mapped["NotificationType"] = relationship(
@@ -857,9 +856,9 @@ class NotificationRecipient(Base, AuditMixin):
     )
     # delivered_at will be set when the notification for this recipient is processed by the notification processing task
     # for each delivery channel, such as line, the corresponding sent_at will be set from the channel's delivery task
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    line_app_sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    delivered_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
+    line_app_sent_at: Mapped[Optional[datetime]] = mapped_column(DATETIME2)
 
     # Relationships
     notification: Mapped["Notification"] = relationship(back_populates="recipients")
@@ -936,7 +935,7 @@ class DashboardStats(Base, AuditMixin):
         Integer, default=0, nullable=False
     )
     last_calculated_at: Mapped[datetime] = mapped_column(
-        DateTime,
+        DATETIME2,
         server_default=func.getutcdate(),
         onupdate=func.getutcdate(),
         nullable=False,
