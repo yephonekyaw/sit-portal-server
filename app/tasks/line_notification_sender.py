@@ -48,7 +48,7 @@ async def _async_send_line_notification(
     for db_session in get_sync_session():
         try:
 
-            # Get notification and recipient in a single optimized query
+            # Get notification and recipient in a single query
             notification_result = db_session.execute(
                 select(Notification, NotificationRecipient)
                 .join(

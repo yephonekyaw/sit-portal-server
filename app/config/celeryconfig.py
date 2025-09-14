@@ -91,4 +91,4 @@ beat_schedule = {
 task_default_queue = "sitportal"
 
 # Beat Scheduler Configuration
-beat_schedule_filename = "app/celerybeat-schedule"
+beat_schedule_filename = "tmp/celerybeat-schedule"

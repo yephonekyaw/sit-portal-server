@@ -236,7 +236,7 @@ class ProgramService:
         return program_response
 
     def _build_programs_query_with_counts(self):
-        """Build optimized query for programs with requirement counts"""
+        """Build query for programs with requirement counts"""
         # Subquery for active requirements count
         active_req_subquery = (
             select(

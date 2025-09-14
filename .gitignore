@@ -221,3 +221,7 @@ file*/
 # Claude
 .claude/
 CLAUDE.md
+
+# Temp files
+tmp*/
+temp*/

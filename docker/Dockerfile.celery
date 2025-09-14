@@ -1,50 +1,97 @@
-FROM python:3.13-slim
+FROM python:3.13-slim AS builder
+
+# Set build-time environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_DEFAULT_TIMEOUT=100
+
+WORKDIR /build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Build essentials
+    build-essential \
+    curl \
+    gnupg \
+    apt-transport-https \
+    pkg-config \
+    # Database drivers build deps
+    unixodbc-dev \
+    libgssapi-krb5-2 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc /usr/share/man
+
+# Install Microsoft ODBC Driver (needed for SQL Server)
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
+    && echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
+        msodbcsql18 \
+        mssql-tools18 \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc /usr/share/man
+
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+COPY requirements.txt .
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install --no-deps -r requirements.txt \
+    && find /opt/venv -type f -name "*.pyc" -delete \
+    && find /opt/venv -type d -name "__pycache__" -delete
+
+FROM python:3.13-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONPATH="/server" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 
 WORKDIR /server
 
-ENV PYTHONDONTWRITEBYTECODE=1
-ENV PYTHONUNBUFFERED=1
-ENV PIP_NO_CACHE_DIR=1
-
-RUN apt-get update && apt-get install -y \
-    curl \
-    build-essential \
-    gnupg \
-    apt-transport-https \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    # OCR runtime dependencies (essential for document processing)
     tesseract-ocr \
     tesseract-ocr-eng \
-    libtesseract-dev \
-    libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
-    libgomp1 \
-    libgtk-3-0 \
+    # Database runtime deps
+    unixodbc \
+    libgssapi-krb5-2 \
+    # Minimal system utils
+    curl \
+    gnupg \
+    apt-transport-https \
+    # Supervisor for process management
+    supervisor \
     && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc /usr/share/man /usr/share/locale
 
-# Install Microsoft ODBC Driver for SQL Server
-RUN set -eux; \
-    curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg; \
-    echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list; \
-    apt-get update && ACCEPT_EULA=Y apt-get install -y \
+# Install Microsoft ODBC Driver (runtime only)
+RUN curl -sSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > /usr/share/keyrings/microsoft-prod.gpg \
+    && echo "deb [arch=amd64,arm64,armhf signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main" > /etc/apt/sources.list.d/mssql-release.list \
+    && apt-get update && ACCEPT_EULA=Y apt-get install -y --no-install-recommends \
         msodbcsql18 \
         mssql-tools18 \
-        unixodbc-dev \
-        libgssapi-krb5-2 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /usr/share/doc /usr/share/man
 
-COPY requirements.txt .
+COPY --from=builder /opt/venv /opt/venv
 
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+RUN mkdir -p /ms-playwright \
+    && python -m playwright install --with-deps chromium
 
-COPY . .
+RUN useradd --create-home --shell /bin/bash --uid 1001 celery \
+    && mkdir -p /server/logs /var/log/supervisor /var/run /etc/supervisor/conf.d \
+    && chown -R celery:celery /server /ms-playwright /var/log/supervisor /var/run
 
-RUN mkdir -p logs && \
-    useradd --create-home --shell /bin/bash celery && \
-    chown -R celery:celery /server
+COPY --chown=celery:celery . .
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-USER celery
+HEALTHCHECK --interval=60s --timeout=30s --start-period=60s --retries=3 \
+    CMD supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status celery-worker && supervisorctl -c /etc/supervisor/conf.d/supervisord.conf status celery-beat || exit 1
 
-CMD ["celery", "-A", "app.celery", "worker", "--loglevel=info", "--concurrency=2"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
