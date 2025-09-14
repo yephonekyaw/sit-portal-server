@@ -1,3 +1,4 @@
+import os
 from functools import lru_cache
 from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
@@ -18,6 +19,16 @@ class LangChainService:
             raise ValueError(
                 "OpenAI API key (OPENAI_API_KEY) is not set in the settings."
             )
+
+        self._set_env_variables()
+
+    def _set_env_variables(self):
+        """Sets necessary environment variables to enable LangSmith tracing"""
+
+        os.environ["LANGSMITH_TRACING"] = settings.LANGSMITH_TRACING or ""
+        os.environ["LANGSMITH_API_KEY"] = settings.LANGSMITH_API_KEY or ""
+        os.environ["LANGSMITH_ENDPOINT"] = settings.LANGSMITH_ENDPOINT or ""
+        os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT or ""
 
     @lru_cache(maxsize=1)
     def get_openai_chat_model(self) -> ChatOpenAI:

@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "<your-database-url>"
 
     # LangChain & LangSmith
-    LANGSMITH_TRACING: bool = True
+    LANGSMITH_TRACING: str = "true"
     LANGSMITH_ENDPOINT: str = "<your-langsith-endpoint>"
     LANGSMITH_API_KEY: str = "<your-langsith-api-key>"
     LANGSMITH_PROJECT: str = "<your-langsith-project>"

@@ -63,9 +63,7 @@ async def get_unread_notifications(
             f"Failed to get unread notifications for user {current_user.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise ValidationError(
-            [{"type": "internal_error", "msg": "Failed to retrieve notifications"}]
-        )
+        raise ValidationError("Failed to retrieve unread notifications")
 
 
 @notifications_router.patch("/{notification_id}/read")
@@ -106,9 +104,7 @@ async def mark_notification_as_read(
             f"Failed to mark notification {notification_id} as read for user {current_user.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise ValidationError(
-            [{"type": "internal_error", "msg": "Failed to mark notification as read"}]
-        )
+        raise ValidationError("Failed to mark notification as read")
 
 
 @notifications_router.patch("/read-all")
@@ -139,14 +135,7 @@ async def mark_all_notifications_as_read(
             f"Failed to mark all notifications as read for user {current_user.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise ValidationError(
-            [
-                {
-                    "type": "internal_error",
-                    "msg": "Failed to mark all notifications as read",
-                }
-            ]
-        )
+        raise ValidationError("Failed to mark all notifications as read")
 
 
 @notifications_router.patch("/clear-all")
@@ -179,9 +168,59 @@ async def clear_all_notifications(
             f"Failed to clear notifications for user {current_user.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise ValidationError(
-            [{"type": "internal_error", "msg": "Failed to clear notifications"}]
+        raise ValidationError("Failed to clear notifications")
+
+
+@notifications_router.patch("/{notification_id}/clear")
+async def clear_notification(
+    request: Request,
+    notification_id: str,
+    current_user: Annotated[AuthState, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_sync_session)],
+):
+    """
+    Clear a specific notification by marking it as expired.
+
+    Args:
+        notification_id: UUID of the notification recipient record to clear
+
+    This marks the notification as expired, which means it will no longer
+    appear in the client. The notification is not deleted from the database
+    for audit purposes.
+    """
+    try:
+        service = UserNotificationService(db)
+
+        # Mark as read if not already read
+        await service.mark_notification_as_read(
+            user_id=current_user.user_id, notification_recipient_id=notification_id
         )
+
+        # Clear the notification (mark as expired)
+        success = await service.clear_notification(
+            user_id=current_user.user_id, notification_recipient_id=notification_id
+        )
+
+        if not success:
+            raise NotFoundError("Notification not found or already cleared")
+
+        # Get updated unread count
+        unread_count = await service.get_unread_count(current_user.user_id)
+
+        return ResponseBuilder.success(
+            request=request,
+            data={"unreadCount": unread_count},
+            message="Notification cleared successfully",
+        )
+
+    except (ValidationError, NotFoundError):
+        raise
+    except Exception as e:
+        logger.error(
+            f"Failed to clear notification {notification_id} for user {current_user.user_id}: {str(e)}",
+            exc_info=True,
+        )
+        raise ValidationError("Failed to clear notification")
 
 
 @notifications_router.get("/count")
@@ -212,6 +251,4 @@ async def get_unread_count(
             f"Failed to get unread count for user {current_user.user_id}: {str(e)}",
             exc_info=True,
         )
-        raise ValidationError(
-            [{"type": "internal_error", "msg": "Failed to get unread count"}]
-        )
+        raise ValidationError("Failed to get unread count")

@@ -256,6 +256,43 @@ class UserNotificationService:
             )
             return 0
 
+    async def clear_notification(self, user_id: str, notification_recipient_id: str) -> bool:
+        """Clear a specific notification by marking it as expired"""
+        try:
+            from sqlalchemy import update
+
+            # Update the specific notification to expired status
+            result = self.db.execute(
+                update(NotificationRecipient)
+                .where(
+                    and_(
+                        NotificationRecipient.id == notification_recipient_id,
+                        NotificationRecipient.recipient_id == user_id,
+                        NotificationRecipient.status != NotificationStatus.EXPIRED,
+                    )
+                )
+                .values(status=NotificationStatus.EXPIRED)
+                .execution_options(synchronize_session=False)
+            )
+
+            self.db.commit()
+            updated_count = result.rowcount
+
+            if updated_count > 0:
+                logger.info(f"Cleared notification {notification_recipient_id} for user {user_id}")
+                return True
+            else:
+                logger.warning(f"Notification {notification_recipient_id} not found or already expired for user {user_id}")
+                return False
+
+        except Exception as e:
+            self.db.rollback()
+            logger.error(
+                f"Failed to clear notification {notification_recipient_id} for user {user_id}: {str(e)}",
+                exc_info=True,
+            )
+            return False
+
     async def _construct_notification_item(
         self,
         recipient: NotificationRecipient,
