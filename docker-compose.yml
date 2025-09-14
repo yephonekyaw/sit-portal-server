@@ -54,7 +54,6 @@ services:
     memswap_limit: 512m
     security_opt:
       - no-new-privileges:true
-    user: "1000:1000"
 
   celery:
     build:

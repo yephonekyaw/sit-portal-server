@@ -1,8 +1,8 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import Dict, Any
+from fastapi import APIRouter, HTTPException, Depends, Request
 
 from app.services.minio_service import get_minio_service, MinIOService
 from app.utils.logging import get_logger
+from app.utils.responses import ResponseBuilder
 
 minio_router = APIRouter()
 logger = get_logger()
@@ -10,10 +10,11 @@ logger = get_logger()
 
 @minio_router.get("/files/{object_name:path}/presigned-url")
 async def get_file_presigned_url(
+    request: Request,
     object_name: str,
     expires_in_hours: int = 24,
     minio_service: MinIOService = Depends(get_minio_service),
-) -> Dict[str, Any]:
+):
     """
     Generate a presigned URL for accessing a file in MinIO storage.
 
@@ -36,7 +37,13 @@ async def get_file_presigned_url(
             object_name=object_name, expires_in_hours=expires_in_hours
         )
 
-        return result
+        return ResponseBuilder.success(
+            request=request,
+            data={
+                "presignedUrl": result["presigned_url"],
+            },
+            message=f"Generated presigned URL for {object_name}",
+        )
 
     except HTTPException:
         raise
