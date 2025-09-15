@@ -46,6 +46,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
         "/openapi.json",
         "/api/v1/shared/auth/login",
         "/api/v1/shared/health",
+        "/webhook/v1",
     }
 
     def __init__(self, app, excluded_paths: Optional[set] = None):

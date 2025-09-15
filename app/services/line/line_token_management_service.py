@@ -3,7 +3,6 @@ import time
 from datetime import timedelta
 from pathlib import Path
 from typing import Dict, List, Optional
-from urllib.parse import quote_plus
 
 import httpx
 import jwt
@@ -81,11 +80,9 @@ class LineChannelTokenService:
         jwt_token = self._generate_jwt_token()
 
         data = {
-            "grant_type": quote_plus("client_credentials"),
-            "client_assertion_type": quote_plus(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-            ),
-            "client_assertion": quote_plus(jwt_token),
+            "grant_type": "client_credentials",
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": jwt_token,
         }
 
         async with httpx.AsyncClient() as client:
@@ -109,10 +106,8 @@ class LineChannelTokenService:
         jwt_token = self._generate_jwt_token()
 
         params = {
-            "client_assertion_type": quote_plus(
-                "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
-            ),
-            "client_assertion": quote_plus(jwt_token),
+            "client_assertion_type": "urn:ietf:params:oauth:client-assertion-type:jwt-bearer",
+            "client_assertion": jwt_token,
         }
 
         async with httpx.AsyncClient() as client:
@@ -139,9 +134,9 @@ class LineChannelTokenService:
             )
 
         data = {
-            "client_id": quote_plus(settings.LINE_CHANNEL_ID),
-            "client_secret": quote_plus(settings.LINE_CHANNEL_SECRET),
-            "access_token": quote_plus(access_token),
+            "client_id": settings.LINE_CHANNEL_ID,
+            "client_secret": settings.LINE_CHANNEL_SECRET,
+            "access_token": access_token,
         }
 
         async with httpx.AsyncClient() as client:
@@ -280,3 +275,7 @@ def generate_signing_keys() -> None:
         json.dump(keys, f, indent=2)
 
     key_file.chmod(0o600)
+
+
+def get_line_channel_token_service(db_session: Session) -> LineChannelTokenService:
+    return LineChannelTokenService(db_session)

@@ -21,7 +21,7 @@ from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
-def daily_requirement_notifier_task(self, request_id: str):
+def daily_requirement_schedule_notifier_task(self, request_id: str):
     """
     Daily task to send requirement deadline notifications to students.
 
@@ -44,10 +44,10 @@ def daily_requirement_notifier_task(self, request_id: str):
         request_id: Request ID for tracking purposes
     """
 
-    return asyncio.run(_async_daily_requirement_notifier(request_id))
+    return asyncio.run(_async_daily_requirement_schedule_notifier(request_id))
 
 
-async def _async_daily_requirement_notifier(request_id: str):
+async def _async_daily_requirement_schedule_notifier(request_id: str):
     logger = get_logger().bind(request_id=request_id)
 
     for db_session in get_sync_session():

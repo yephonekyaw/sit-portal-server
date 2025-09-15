@@ -71,12 +71,10 @@ async def _async_daily_scheduled_notifications_processor(request_id: str):
             for notification in scheduled_notifications:
                 try:
                     # Import here to avoid circular imports
-                    from app.tasks.notification_processing import (
-                        process_notification_task,
-                    )
+                    from app.tasks import process_notification_task
 
                     # Trigger the existing notification processing task
-                    process_notification_task.delay(
+                    process_notification_task.delay(  # type: ignore
                         request_id=request_id, notification_id=str(notification.id)
                     )
 

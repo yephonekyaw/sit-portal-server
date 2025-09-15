@@ -13,7 +13,7 @@ academic_years_router = APIRouter(dependencies=[Depends(require_staff)])
 
 
 @academic_years_router.get(
-    "/",
+    "",
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Get all academic years",

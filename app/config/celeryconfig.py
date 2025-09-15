@@ -44,30 +44,30 @@ task_retry_jitter = False
 beat_schedule = {
     # Daily notification tasks - Run at 9:00 AM Bangkok time
     "daily-scheduled-notifications-processor": {
-        "task": "app.tasks.daily_scheduled_processor.daily_scheduled_notifications_processor_task",
+        "task": "app.tasks.cron.daily_scheduled_notification_processor.daily_scheduled_notifications_processor_task",
         "schedule": crontab(hour=9, minute=0),
         "args": ("daily_scheduled_processor_cron",),
     },
     "daily-requirement-schedule-notifier": {
-        "task": "app.tasks.daily_requirement_schedule_notifier.daily_requirement_notifier_task",
+        "task": "app.tasks.cron.daily_requirement_schedule_notifier.daily_requirement_schedule_notifier_task",
         "schedule": crontab(hour=9, minute=0),
         "args": ("daily_requirement_schedule_notifier_cron",),
     },
     # Daily maintenance tasks - Run at midnight Bangkok time
     "daily-notification-expiration": {
-        "task": "app.tasks.daily_notification_expiration.daily_notification_expiration_task",
+        "task": "app.tasks.cron.daily_notification_expiration.daily_notification_expiration_task",
         "schedule": crontab(hour=0, minute=5),
         "args": ("daily_expiration_cron",),
     },
     # Monthly schedule management - 1st of every month at midnight Bangkok time
     "monthly-schedule-creator": {
-        "task": "app.tasks.monthly_schedule_creator.monthly_schedule_creator_task",
+        "task": "app.tasks.cron.monthly_schedule_creator.monthly_schedule_creator_task",
         "schedule": crontab(hour=0, minute=0, day_of_month=1),
         "args": ("monthly_schedule_creator_cron",),
     },
     # Annual maintenance - Second Monday of August at 2:00 AM Bangkok time
     "annual-requirement-archiver": {
-        "task": "app.tasks.annual_requirement_archiver.annual_requirement_archiver_task",
+        "task": "app.tasks.cron.annual_requirement_archiver.annual_requirement_archiver_task",
         "schedule": crontab(
             hour=2, minute=0, day_of_week=1, month_of_year=8, day_of_month="8-14"
         ),
@@ -75,13 +75,13 @@ beat_schedule = {
     },
     # LINE API management - Every 15 days at 3:00 AM Bangkok time
     "line-token-manager": {
-        "task": "app.tasks.line_token_manager.line_token_manager_task",
+        "task": "app.tasks.cron.line_token_manager.line_token_manager_task",
         "schedule": crontab(hour=3, minute=0, day_of_month="*/15"),
         "args": ("line_token_manager_cron",),
     },
     # Test cron reporter - Every 2 minutes
     "cron-reporter-test": {
-        "task": "app.tasks.cron_reporter.cron_reporter_task",
+        "task": "app.tasks.cron.cron_reporter.cron_reporter_task",
         "schedule": crontab(minute="*/2"),
         "args": ("cron_reporter_test_job",),
     },

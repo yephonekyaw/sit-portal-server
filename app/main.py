@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config.settings import settings
 from app.utils.logging import get_logger
-from app.routers.main import main_router
+from app.routers import main_router, webhook_router
 from app.utils.errors import setup_error_handlers
 from app.middlewares import (
     RequestIDMiddleware,
@@ -51,8 +51,11 @@ def create_application() -> FastAPI:
     application.add_middleware(AuthMiddleware)
     application.add_middleware(RequestIDMiddleware)
 
-    # Router
-    application.include_router(main_router, prefix=settings.API_PREFIX)
+    # Routers
+    application.include_router(main_router, prefix=settings.API_PREFIX, tags=["APIs"])
+    application.include_router(
+        webhook_router, prefix=settings.WEBHOOK_PREFIX, tags=["Webhooks"]
+    )
 
     return application
 

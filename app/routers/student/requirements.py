@@ -25,7 +25,7 @@ from app.services.staff.dashboard_stats_service import (
 from app.utils.logging import get_logger
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import BusinessLogicError
-from app.tasks.citi_cert_verification_task import verify_certificate_task
+from app.tasks import verify_certificate_task
 from app.middlewares.auth_middleware import require_student, AuthState
 from app.services.notifications.utils import (
     get_staff_user_ids_by_program_and_role,
@@ -112,7 +112,7 @@ async def submit_student_certificate(
         )
 
         # Call celery verification task
-        verify_certificate_task.delay(
+        verify_certificate_task.delay(  # type: ignore
             request.state.request_id, submission_response.submission_id
         )
 

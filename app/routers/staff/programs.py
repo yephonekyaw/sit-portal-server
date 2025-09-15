@@ -22,7 +22,7 @@ programs_router = APIRouter(dependencies=[Depends(require_staff)])
 
 # API Endpoints
 @programs_router.get(
-    "/",
+    "",
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Get all programs with requirement counts",
@@ -55,7 +55,7 @@ async def get_all_programs(
 
 
 @programs_router.post(
-    "/",
+    "",
     response_model=ProgramResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new program",

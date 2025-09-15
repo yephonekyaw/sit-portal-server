@@ -4,7 +4,7 @@ from app.utils.responses import ResponseBuilder
 health_router = APIRouter()
 
 
-@health_router.get("/")
+@health_router.get("")
 async def health_check(request: Request):
     """
     Basic health check endpoint

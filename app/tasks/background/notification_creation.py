@@ -116,11 +116,9 @@ async def _async_create_notification(
                     pass
                 else:
                     # Trigger immediate processing for non-scheduled notifications
-                    from app.tasks.notification_processing import (
-                        process_notification_task,
-                    )
+                    from app.tasks import process_notification_task
 
-                    process_notification_task.delay(
+                    process_notification_task.delay(  # type: ignore
                         request_id=request_id,
                         notification_id=str(notification_id),
                     )

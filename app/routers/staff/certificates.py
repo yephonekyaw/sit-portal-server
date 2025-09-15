@@ -21,7 +21,7 @@ certificates_router = APIRouter(dependencies=[Depends(require_staff)])
 
 # API Endpoints
 @certificates_router.get(
-    "/",
+    "",
     response_model=List[GetCertificatesItem],
     status_code=status.HTTP_200_OK,
     summary="Get all certificate types with counts",

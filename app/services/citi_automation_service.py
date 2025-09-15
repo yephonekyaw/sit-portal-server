@@ -3,7 +3,6 @@ import re
 from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
 from sqlalchemy import select
-from sqlalchemy.orm import Session
 
 from app.utils.logging import get_logger
 from app.config.settings import settings
@@ -83,27 +82,51 @@ class CitiProgramAutomationService:
                     # Capture PDF
                     pdf_page = await context.new_page()
 
-                    async def handle_pdf_requests(route, request):
+                    async def handle_pdf_requests(route):
                         nonlocal certificate_data
-                        response = await context.request.get(request.url)
+                        response = await route.fetch()
                         certificate_data = await response.body()
                         logger.info(f"PDF captured ({len(certificate_data)} bytes)")
-                        await route.continue_()
+                        await route.abort()
 
-                    await pdf_page.route("**/*", handle_pdf_requests)
-                    await pdf_page.goto(url, timeout=settings.CITI_TIMEOUT)
-                    await pdf_page.wait_for_load_state("networkidle")
-                    await asyncio.sleep(5)  # Wait for PDF capture
+                    await pdf_page.route(
+                        "https://www.citiprogram.org/verify/?*", handle_pdf_requests
+                    )
 
-                except PlaywrightError as e:
-                    if "net::ERR_ABORTED" in str(e) or "Download is starting" in str(e):
+                    """
+                        Navigating to a URL which triggers the download from the start, using page.got(), will throw a Playwright navigation error. This is an expected behavior in headless mode. The page.goto() function is to navigate to a URL and wait for the resource to load (like loading the content in a new tab). Normally, in a headed browser, this would work fine as the Chromium borwser open a new tab and embed the captured PDF into the embedded PDF viewer. However, in headless Chromium or Firefox (both headed and headless), the navigation will not happend as the PDF content is directly downloaded. This throws the following error:
+                            if (browserName === 'chromium') {
+                                expect(responseOrError instanceof Error).toBeTruthy();
+                                expect(responseOrError.message).toContain('net::ERR_ABORTED');
+                                expect(page.url()).toBe('about:blank');
+                            } else if (browserName === 'webkit') {
+                                expect(responseOrError instanceof Error).toBeTruthy();
+                                expect(responseOrError.message).toContain('Download is starting');
+                                expect(page.url()).toBe('about:blank');
+                            } else {
+                                expect(responseOrError instanceof Error).toBeTruthy();
+                                expect(responseOrError.message).toContain('Download is starting');
+                            }
+                        
+                        Playwright Docs:
+                        https://playwright.dev/python/docs/network#glob-url-patterns
+
+                        Issue References:
+                        https://github.com/microsoft/playwright/issues/18430
+                        https://issues.chromium.org/issues/41342415
+                        https://github.com/microsoft/playwright/issues/7822
+                        https://github.com/microsoft/playwright/issues/3509#issuecomment-675441299
+                    """
+                    try:
+                        await pdf_page.goto(url, timeout=settings.CITI_TIMEOUT)
+                    except PlaywrightError:
                         logger.warning(
                             "Request aborted - this may be expected behavior in headless mode"
                         )
-                        # certificate_data may have been captured before the abort
-                    else:
-                        logger.error(f"Playwright error during automation: {e}")
-                        raise
+
+                except PlaywrightError as e:
+                    logger.error(f"Playwright error during automation: {e}")
+                    raise
                 finally:
                     await context.close()
                     await browser.close()

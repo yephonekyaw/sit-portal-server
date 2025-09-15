@@ -1,10 +1,11 @@
-# import os
-# import re
-# import asyncio
-# from playwright.async_api import async_playwright
-# from app.utils.logging import get_logger
-# logger = get_logger()
 # async def test_playwright_browser():
+#     import os
+#     import re
+#     from playwright.async_api import async_playwright
+#     from app.utils.logging import get_logger
+
+#     logger = get_logger()
+
 #     """
 #     Test function to display a website using Playwright with a visible browser.
 #     Shows the website for 5-10 seconds for testing purposes.
@@ -15,7 +16,7 @@
 #     async with async_playwright() as p:
 #         # Launch browser in non-headless mode for visibility
 #         browser = await p.chromium.launch(
-#             headless=False,  # Set to False to see the browser
+#             headless=True,  # Set to False to see the browser
 #             slow_mo=1000,  # Optional: slow down actions by 1 second for visibility
 #             timeout=60000,  # Optional: set a timeout for browser launch
 #         )
@@ -74,21 +75,14 @@
 #             page = await context.new_page()
 
 #             async def handle(route, request):
-#                 if request.resource_type == "document":
-#                     response = await context.request.get(request.url)
-#                     raw_pdf_content = await response.body()
-#                     filename = "downloads/citi_certificate.pdf"
-#                     with open(filename, "wb") as f:
-#                         f.write(raw_pdf_content)
+#                 print(route)
+#                 response = await route.fetch()
+#                 raw_pdf_content = await response.body()
+#                 print(f"Raw PDF content: {raw_pdf_content}")
+#                 await route.abort()
 
-#                     await route.continue_()
-#                 else:
-#                     await route.continue_()
-
-#             await page.route("**/*", handle)
+#             await page.route("https://www.citiprogram.org/verify/?*", handle)
 #             await page.goto(link)
-#             await page.wait_for_load_state("networkidle")
-
 #             await asyncio.sleep(5)
 
 #         except Exception as e:
@@ -104,6 +98,13 @@
 
 
 # def tesseract():
+#     import pymupdf
+#     import pytesseract
+#     from PIL import Image
+#     from io import BytesIO
+
+#     from app.config.settings import settings
+
 #     pytesseract.pytesseract.tesseract_cmd = settings.TESSERACT_CMD
 #     tesseract_config = r"--oem 1 --psm 3"
 #     input_img = "tesseract/mock_file_1.pdf"
@@ -126,21 +127,24 @@
 #     print(f"Extracted Text:\n{text} with confidence {confidence.round(2)}")
 
 
-# def temp():
-#     for db_session in get_sync_session():
-#         program = (
-#             (
-#                 db_session.execute(
-#                     select(Program).where(
-#                         Program.id == "1FE58100-B598-4512-8E1B-08886532A2E1"
-#                     )
-#                 )
-#             )
-#             .scalars()
-#             .first()
-#         )
-#         print(type(program.id))
+# async def generate_and_store_new_token_manually():
+#     from app.db.session import get_sync_session
+#     from app.services.line_token_management_service import (
+#         get_line_channel_token_service,
+#     )
 
+#     for db_session in get_sync_session():
+#         line_service = get_line_channel_token_service(db_session)
+
+#         new_token = await line_service.generate_and_store_new_token()
+#         if new_token:
+#             print(f"Generated new token: {new_token.key_id}")
+#         else:
+#             print("Failed to generate new token.")
+
+
+import asyncio
 
 if __name__ == "__main__":
+    asyncio.run(generate_and_store_new_token_manually())
     pass

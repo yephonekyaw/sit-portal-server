@@ -20,7 +20,7 @@ program_requirement_schedules_router = APIRouter(dependencies=[Depends(require_s
 
 # API Endpoints
 @program_requirement_schedules_router.get(
-    "/",
+    "",
     response_model=None,
     status_code=status.HTTP_200_OK,
     summary="Get all program requirement schedules with comprehensive data",
@@ -57,7 +57,7 @@ async def get_all_program_requirement_schedules(
 
 
 @program_requirement_schedules_router.post(
-    "/",
+    "",
     response_model=None,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new program requirement schedule",

@@ -22,7 +22,7 @@ program_requirements_router = APIRouter(dependencies=[Depends(require_staff)])
 
 # API Endpoints
 @program_requirements_router.get(
-    "/",
+    "",
     response_model=List[GetProgramRequirementsItem],
     status_code=status.HTTP_200_OK,
     summary="Get all program requirements",
@@ -55,7 +55,7 @@ async def get_all_program_requirements(
 
 
 @program_requirements_router.post(
-    "/",
+    "",
     response_model=ProgramRequirementResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a new program requirement",

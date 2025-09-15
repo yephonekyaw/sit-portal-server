@@ -46,6 +46,7 @@ dependencies = [
     "langchain[openai]==0.3.27",
     "langsmith==0.4.27",
     "ldap3==2.9.1",
+    "line-bot-sdk>=3.19.0",
     "loguru==0.7.3",
     "markdown-it-py==4.0.0",
     "markupsafe==3.0.2",

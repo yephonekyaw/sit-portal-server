@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     VERSION: str = "<your-app-version>"
     API_PREFIX: str = "<your-api-prefix>"
     WEB_SOCKET_PREFIX: str = "<your-web-sockets-prefix>"
+    WEBHOOK_PREFIX: str = "<your-webhook-prefix>"
     """Pydantic v2 doesn't support parsing List[str] from a plain comma-separated string by default anymore."""
     ALLOWED_HOSTS: Union[str, List[str]] = "<your-allowed-host-1,<your-allowed-host-2>>"
     LOG_LEVEL: str = "<your-log-level>"

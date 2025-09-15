@@ -286,7 +286,7 @@ def create_notification_sync(
         str: Celery task ID
     """
     try:
-        from app.tasks.notification_creation import create_notification_task
+        from app.tasks.background.notification_creation import create_notification_task
 
         task_args = {
             "request_id": request_id,
@@ -303,7 +303,7 @@ def create_notification_sync(
         }
 
         # Use Celery task for async processing
-        create_notification_task.delay(**task_args)
+        create_notification_task.delay(**task_args)  # type: ignore
 
     except Exception as e:
         logger.error(

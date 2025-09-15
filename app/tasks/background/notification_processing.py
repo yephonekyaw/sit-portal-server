@@ -82,11 +82,9 @@ async def _async_process_notification(request_id: str, notification_id: str):
 
                 if recipient.line_app_enabled:
                     # Create LINE sending task
-                    from app.tasks.line_notification_sender import (
-                        send_line_notification_task,
-                    )
+                    from app.tasks import send_line_notification_task
 
-                    send_line_notification_task.delay(
+                    send_line_notification_task.delay(  # type: ignore
                         request_id=request_id,
                         notification_id=notification_id,
                         recipient_id=str(recipient.recipient_id),
