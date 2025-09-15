@@ -621,9 +621,7 @@ class Student(Base, AuditMixin):
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
-    line_application_id: Mapped[Optional[str]] = mapped_column(
-        StringUUID, unique=True, server_default=func.newid()
-    )
+    line_application_id: Mapped[Optional[str]] = mapped_column(String(100), unique=True)
     enrollment_status: Mapped[EnrollmentStatus] = mapped_column(
         Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False
     )

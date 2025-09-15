@@ -1,5 +1,3 @@
-import random
-import uuid
 import asyncio
 from typing import Optional
 
@@ -16,6 +14,7 @@ from app.db.models import (
     User,
 )
 from app.services.notifications.registry import NotificationServiceRegistry
+from app.services.line.line_webhook_service import LineWebhookService
 from app.utils.logging import get_logger
 from app.utils.datetime_utils import naive_utc_now
 
@@ -117,7 +116,7 @@ async def _async_send_line_notification(
                 }
 
             # Validate recipient can receive LINE notifications
-            if not await _validate_line_recipient(db_session, recipient_id):
+            if not _validate_line_recipient(db_session, recipient_id):
                 logger.warning(
                     f"Recipient not configured for LINE notifications: {recipient_id}"
                 )
@@ -130,7 +129,7 @@ async def _async_send_line_notification(
                 }
 
             # Get recipient's LINE user ID
-            line_user_id = await _get_line_user_id(db_session, recipient_id)
+            line_user_id = _get_line_user_id(db_session, recipient_id)
             if not line_user_id:
                 logger.error(f"Recipient LINE user ID not found: {recipient_id}")
                 recipient.status = NotificationStatus.FAILED
@@ -141,15 +140,16 @@ async def _async_send_line_notification(
                     "request_id": request_id,
                 }
 
-            # MOCK: Simulate LINE API call
-            mock_line_success = await _mock_send_line_message(
+            # Send LINE notification using LineWebhookService
+            line_success = await _send_line_notification(
+                db_session=db_session,
                 line_user_id=line_user_id,
                 subject=message.get("subject", "Notification"),
                 body=message.get("body", "You have a notification"),
                 logger=logger,
             )
 
-            if mock_line_success:
+            if line_success:
                 # Update recipient status
                 recipient.status = NotificationStatus.DELIVERED
                 recipient.line_app_sent_at = naive_utc_now()
@@ -188,7 +188,7 @@ async def _async_send_line_notification(
             }
 
 
-async def _validate_line_recipient(db_session: Session, recipient_id: str) -> bool:
+def _validate_line_recipient(db_session: Session, recipient_id: str) -> bool:
     """
     Validate that recipient has LINE configured.
 
@@ -212,7 +212,7 @@ async def _validate_line_recipient(db_session: Session, recipient_id: str) -> bo
         return False
 
 
-async def _get_line_user_id(db_session: Session, recipient_id: str) -> Optional[str]:
+def _get_line_user_id(db_session: Session, recipient_id: str) -> Optional[str]:
     """Get the recipient's LINE user ID"""
     try:
         result = db_session.execute(
@@ -227,54 +227,38 @@ async def _get_line_user_id(db_session: Session, recipient_id: str) -> Optional[
         return None
 
 
-async def _mock_send_line_message(
-    line_user_id: str, subject: str, body: str, logger
+async def _send_line_notification(
+    db_session: Session, line_user_id: str, subject: str, body: str, logger
 ) -> bool:
     """
-    Mock function to simulate sending a LINE message.
+    Send LINE notification using LineWebhookService.
 
-    TODO: Replace this with actual LINE messaging API integration.
-
-    Production implementation would look like:
-
-    import aiohttp
-    from app.config.settings import settings
-
-    async def _send_line_message(line_user_id: str, subject: str, body: str) -> bool:
-        headers = {
-            'Authorization': f'Bearer {settings.LINE_CHANNEL_ACCESS_TOKEN}',
-            'Content-Type': 'application/json',
-        }
-
-        payload = {
-            'to': line_user_id,
-            'messages': [
-                {
-                    'type': 'text',
-                    'text': f"{subject}\\n\\n{body}"
-                }
-            ]
-        }
-
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                'https://api.line.me/v2/bot/message/push',
-                headers=headers,
-                json=payload
-            ) as response:
-                return response.status == 200
+    Args:
+        db_session: Database session
+        line_user_id: LINE user ID to send to
+        subject: Message subject
+        body: Message body
+        logger: Logger instance
 
     Returns:
         bool: True if successful, False if failed
     """
+    try:
+        # Create LINE service instance
+        line_service = LineWebhookService(db_session)
 
-    # Simulate network delay (removed for performance)
-    # await asyncio.sleep(1)
+        # Send push notification
+        success = await line_service.send_push_notification(
+            line_user_id=line_user_id, subject=subject, body=body
+        )
 
-    # Simulate 95% success rate
-    success = random.random() > 0.05
+        if success:
+            logger.info(f"LINE notification sent successfully to {line_user_id}")
+        else:
+            logger.warning(f"LINE notification failed to send to {line_user_id}")
 
-    if not success:
-        logger.warning(f"MOCK: LINE message failed to send to {line_user_id}")
+        return success
 
-    return success
+    except Exception as e:
+        logger.error(f"Error sending LINE notification: {str(e)}")
+        return False

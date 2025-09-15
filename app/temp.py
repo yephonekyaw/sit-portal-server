@@ -143,6 +143,20 @@
 #             print("Failed to generate new token.")
 
 
+# async def send_line_notification(
+#     db_session: Session, line_user_id: str, subject: str, body: str
+# ) -> bool:
+#     """Convenience function to send LINE notification"""
+#     line_service = get_line_webhook_service(db_session)
+#     return await line_service.send_push_notification(line_user_id, subject, body)
+
+
+# async def validate_line_user(db_session: Session, line_user_id: str) -> bool:
+#     """Convenience function to validate LINE user exists"""
+#     line_service = get_line_webhook_service(db_session)
+#     return await line_service.validate_line_user_exists(line_user_id)
+
+
 import asyncio
 
 if __name__ == "__main__":
