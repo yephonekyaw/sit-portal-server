@@ -137,7 +137,6 @@ class LineWebhookService:
                 self._reply_message(str(event.reply_token), registration_message)
 
     def _handle_default_event(self, event: Event, *args) -> None:
-        print(event)
         """Handle unsupported events"""
         # Try to reply if the event has a reply token
         if hasattr(event, "reply_token") and getattr(event, "reply_token", None):

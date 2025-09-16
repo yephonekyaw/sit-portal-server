@@ -621,7 +621,7 @@ class Student(Base, AuditMixin):
         ForeignKey("academic_years.id", ondelete="NO ACTION"),
         nullable=False,
     )
-    line_application_id: Mapped[Optional[str]] = mapped_column(String(100), unique=True)
+    line_application_id: Mapped[Optional[str]] = mapped_column(String(100))
     enrollment_status: Mapped[EnrollmentStatus] = mapped_column(
         Enum(EnrollmentStatus), default=EnrollmentStatus.ACTIVE, nullable=False
     )
@@ -636,6 +636,12 @@ class Student(Base, AuditMixin):
 
     # Constraints
     __table_args__ = (
+        Index(
+            "idx_students_line_application_id",
+            "line_application_id",
+            unique=True,
+            mssql_where="line_application_id IS NOT NULL",
+        ),
         Index("idx_students_user_id", "user_id"),
         Index("idx_students_program_id", "program_id"),
         Index("idx_students_academic_year_id", "academic_year_id"),

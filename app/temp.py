@@ -127,20 +127,20 @@
 #     print(f"Extracted Text:\n{text} with confidence {confidence.round(2)}")
 
 
-# async def generate_and_store_new_token_manually():
-#     from app.db.session import get_sync_session
-#     from app.services.line_token_management_service import (
-#         get_line_channel_token_service,
-#     )
+async def generate_and_store_new_token_manually():
+    from app.db.session import get_sync_session
+    from app.services.line.line_token_management_service import (
+        get_line_channel_token_service,
+    )
 
-#     for db_session in get_sync_session():
-#         line_service = get_line_channel_token_service(db_session)
+    for db_session in get_sync_session():
+        line_service = get_line_channel_token_service(db_session)
 
-#         new_token = await line_service.generate_and_store_new_token()
-#         if new_token:
-#             print(f"Generated new token: {new_token.key_id}")
-#         else:
-#             print("Failed to generate new token.")
+        new_token = await line_service.generate_and_store_new_token()
+        if new_token:
+            print(f"Generated new token: {new_token.key_id}")
+        else:
+            print("Failed to generate new token.")
 
 
 # async def send_line_notification(
