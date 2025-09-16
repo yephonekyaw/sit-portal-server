@@ -374,7 +374,7 @@ class CitiProgramAutomationService:
             scheduled_for=None,
             expires_at=None,
             in_app_enabled=True,
-            line_app_enabled=False,
+            line_app_enabled=True,
         )
 
         logger.info(

@@ -127,38 +127,34 @@
 #     print(f"Extracted Text:\n{text} with confidence {confidence.round(2)}")
 
 
-async def generate_and_store_new_token_manually():
-    from app.db.session import get_sync_session
-    from app.services.line.line_token_management_service import (
-        get_line_channel_token_service,
-    )
+# async def generate_and_store_new_token_manually():
+#     from app.db.session import get_sync_session
+#     from app.services.line.line_token_management_service import (
+#         get_line_channel_token_service,
+#     )
 
-    for db_session in get_sync_session():
-        line_service = get_line_channel_token_service(db_session)
+#     for db_session in get_sync_session():
+#         line_service = get_line_channel_token_service(db_session)
 
-        new_token = await line_service.generate_and_store_new_token()
-        if new_token:
-            print(f"Generated new token: {new_token.key_id}")
-        else:
-            print("Failed to generate new token.")
+#         new_token = await line_service.generate_and_store_new_token()
+#         if new_token:
+#             print(f"Generated new token: {new_token.key_id}")
+#         else:
+#             print("Failed to generate new token.")
 
 
-# async def send_line_notification(
-#     db_session: Session, line_user_id: str, subject: str, body: str
-# ) -> bool:
+# async def send_line_notification(line_user_id: str, subject: str, body: str) -> bool:
 #     """Convenience function to send LINE notification"""
-#     line_service = get_line_webhook_service(db_session)
-#     return await line_service.send_push_notification(line_user_id, subject, body)
+#     from app.db.session import get_sync_session
+#     from app.services.line.line_webhook_service import get_line_webhook_service
 
-
-# async def validate_line_user(db_session: Session, line_user_id: str) -> bool:
-#     """Convenience function to validate LINE user exists"""
-#     line_service = get_line_webhook_service(db_session)
-#     return await line_service.validate_line_user_exists(line_user_id)
+#     for db_session in get_sync_session():
+#         line_service = get_line_webhook_service(db_session)
+#         return await line_service.send_push_notification(line_user_id, subject, body)
+#     return False
 
 
 import asyncio
 
 if __name__ == "__main__":
-    asyncio.run(generate_and_store_new_token_manually())
     pass

@@ -2,6 +2,7 @@ import re
 from typing import Optional, cast
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
+from uuid import uuid4
 
 from linebot.v3.webhook import WebhookHandler
 from linebot.v3.webhooks import (
@@ -66,7 +67,15 @@ class LineWebhookService:
 
             if line_access_token:
                 return Configuration(access_token=line_access_token)
-            return None
+            else:
+                line_access_token_row = (
+                    await line_channel_token_service.generate_and_store_new_token()
+                )
+                if line_access_token_row:
+                    return Configuration(
+                        access_token=line_access_token_row.access_token
+                    )
+                return None
         except Exception as e:
             logger.error(f"Failed to get LINE configuration: {str(e)}")
             return None
@@ -268,7 +277,8 @@ class LineWebhookService:
                         ],
                         notificationDisabled=False,
                         customAggregationUnits=None,
-                    )
+                    ),
+                    x_line_retry_key=str(uuid4()),
                 )
                 return True
 
