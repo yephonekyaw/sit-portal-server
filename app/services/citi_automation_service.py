@@ -1,4 +1,5 @@
 import asyncio
+from pathlib import Path
 import re
 from typing import Optional, Dict, Any, cast
 from playwright.async_api import async_playwright, Error as PlaywrightError
@@ -437,9 +438,15 @@ class CitiProgramAutomationService:
                     "error": "Failed to store verification certificate",
                 }
 
+            filename = submission.filename
+            file_ext = Path(filename).suffix.lower()
+            if file_ext != ".pdf":
+                # Rename the file to have .pdf extension
+                filename = re.sub(r"\.[^.]+$", ".pdf", upload_result["object_name"])
+
             # Extract text from verification certificate
             verification_extraction = await self._extract_document_text(
-                upload_result["object_name"], submission.filename
+                upload_result["object_name"], filename
             )
             if not verification_extraction:
                 return {

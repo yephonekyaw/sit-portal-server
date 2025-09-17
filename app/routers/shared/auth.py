@@ -9,7 +9,6 @@ from app.schemas.auth_schemas import (
     UserResponse,
 )
 from app.middlewares.auth_middleware import get_current_user, AuthState
-from app.config.settings import settings
 from app.utils.responses import ResponseBuilder
 from app.utils.errors import AuthenticationError
 from app.utils.cookies import CookieUtils
@@ -58,7 +57,7 @@ async def login(
 
     except AuthenticationError:
         raise
-    except Exception as e:
+    except Exception:
         raise AuthenticationError("Login failed")
 
 
