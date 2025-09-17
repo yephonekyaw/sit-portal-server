@@ -106,30 +106,6 @@ class AuditMixin:
 
 
 # Models
-class CronReport(Base, AuditMixin):
-    __tablename__ = "cron_reports"
-
-    id: Mapped[str] = mapped_column(
-        StringUUID,
-        primary_key=True,
-        server_default=func.newid(),
-    )
-    job_name: Mapped[str] = mapped_column(String(200), nullable=False)
-    run_at: Mapped[datetime] = mapped_column(
-        DATETIME2, server_default=func.getutcdate(), nullable=False
-    )
-    status: Mapped[str] = mapped_column(String(50), nullable=False)
-    message: Mapped[Optional[str]] = mapped_column(Text)
-    details: Mapped[Optional[str]] = mapped_column(Text)
-
-    # Constraints
-    __table_args__ = (
-        Index("idx_cron_reports_job_name", "job_name"),
-        Index("idx_cron_reports_run_at", "run_at"),
-        Index("idx_cron_reports_status", "status"),
-    )
-
-
 class User(Base, AuditMixin):
     __tablename__ = "users"
 

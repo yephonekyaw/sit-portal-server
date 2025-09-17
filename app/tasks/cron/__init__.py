@@ -8,7 +8,6 @@ from .daily_scheduled_notification_processor import (
 )
 from .line_token_manager import line_token_manager_task
 from .monthly_schedule_creator import monthly_schedule_creator_task
-from .cron_reporter import cron_reporter_task
 
 __all__ = [
     "daily_scheduled_notifications_processor_task",
@@ -17,5 +16,4 @@ __all__ = [
     "monthly_schedule_creator_task",
     "annual_requirement_archiver_task",
     "line_token_manager_task",
-    "cron_reporter_task",
 ]

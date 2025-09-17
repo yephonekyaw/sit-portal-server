@@ -13,5 +13,4 @@ __all__ = [
     "monthly_schedule_creator_task",
     "annual_requirement_archiver_task",
     "line_token_manager_task",
-    "cron_reporter_task",
 ]

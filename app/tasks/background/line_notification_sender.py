@@ -8,7 +8,6 @@ from app.celery import celery
 from app.db.session import get_sync_session
 from app.db.models import (
     NotificationRecipient,
-    NotificationStatus,
     Notification,
     Student,
     User,
@@ -16,7 +15,6 @@ from app.db.models import (
 from app.services.notifications.registry import NotificationServiceRegistry
 from app.services.line.line_webhook_service import LineWebhookService
 from app.utils.logging import get_logger
-from app.utils.datetime_utils import naive_utc_now
 
 
 @celery.task(bind=True, max_retries=5, default_retry_delay=120)
@@ -81,14 +79,12 @@ async def _async_send_line_notification(
             )
 
             if not service:
-                logger.error(
+                logger.warning(
                     f"No service found for notification code: {notification.notification_type.code}"
                 )
-                recipient.status = NotificationStatus.FAILED
-                db_session.commit()
                 return {
-                    "success": False,
-                    "error": f"No service found for notification code: {notification.notification_type.code}",
+                    "success": True,
+                    "message": f"No service found for notification code: {notification.notification_type.code}",
                     "request_id": request_id,
                 }
 
@@ -98,20 +94,18 @@ async def _async_send_line_notification(
                 )
                 message = await service.construct_message("line_app", notification_data)
             except Exception as e:
-                logger.error(
+                logger.warning(
                     f"Failed to get notification data or construct message for {notification_id}: {str(e)}"
                 )
                 message = None
 
             if not message:
-                logger.error(
+                logger.warning(
                     f"Failed to get notification message content for {notification_id}"
                 )
-                recipient.status = NotificationStatus.FAILED
-                db_session.commit()
                 return {
-                    "success": False,
-                    "error": "Failed to get message content",
+                    "success": True,
+                    "message": "Failed to get message content",
                     "request_id": request_id,
                 }
 
@@ -120,23 +114,19 @@ async def _async_send_line_notification(
                 logger.warning(
                     f"Recipient not configured for LINE notifications: {recipient_id}"
                 )
-                recipient.status = NotificationStatus.FAILED
-                db_session.commit()
                 return {
-                    "success": False,
-                    "error": "Recipient not configured for LINE notifications",
+                    "success": True,
+                    "message": "Recipient not configured for LINE notifications",
                     "request_id": request_id,
                 }
 
             # Get recipient's LINE user ID
             line_user_id = _get_line_user_id(db_session, recipient_id)
             if not line_user_id:
-                logger.error(f"Recipient LINE user ID not found: {recipient_id}")
-                recipient.status = NotificationStatus.FAILED
-                db_session.commit()
+                logger.warning(f"Recipient LINE user ID not found: {recipient_id}")
                 return {
-                    "success": False,
-                    "error": "Recipient LINE user ID not found",
+                    "success": True,
+                    "message": "Recipient LINE user ID not found",
                     "request_id": request_id,
                 }
 
@@ -150,12 +140,6 @@ async def _async_send_line_notification(
             )
 
             if line_success:
-                # Update recipient status
-                recipient.status = NotificationStatus.DELIVERED
-                recipient.line_app_sent_at = naive_utc_now()
-                recipient.delivered_at = naive_utc_now()
-                db_session.commit()
-
                 return {
                     "success": True,
                     "channel": "line_app",
@@ -164,19 +148,16 @@ async def _async_send_line_notification(
                     "request_id": request_id,
                 }
             else:
-                # Mark as failed and retry
-                recipient.status = NotificationStatus.FAILED
-                db_session.commit()
-
+                logger.warning(f"Failed to send LINE notification to {recipient_id}")
                 return {
-                    "success": False,
-                    "error": "Failed to send LINE notification after all retries",
+                    "success": True,
+                    "message": "Failed to send LINE notification",
                     "request_id": request_id,
                 }
 
         except Exception as e:
             logger.error(
-                f"LINE notification sending task exception for {notification_id}/{recipient_id}: {str(e)}"
+                f"Critical error in LINE notification task for {notification_id}/{recipient_id}: {str(e)}"
             )
 
             return {
