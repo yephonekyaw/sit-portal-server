@@ -16,9 +16,9 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "<your-log-level>"
     COOKIE_DOMAIN: str = "<your-cookie-domain>"
 
-    # Open AI
-    OPENAI_API_KEY: str = "<your-openai-api-key>"
-    OPENAI_MODEL: str = "gpt-5-mini"
+    # Ollama
+    OLLAMA_BASE_URL: str = "<your-ollama-base-url>"
+    OLLAMA_MODEL: str = "<your-ollama-model>"
 
     # Tesseract OCR
     TESSERACT_CMD: str = ""

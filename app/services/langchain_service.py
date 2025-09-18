@@ -1,7 +1,7 @@
 import os
 from functools import lru_cache
-from langchain_openai import ChatOpenAI
-from langchain.prompts import PromptTemplate
+from langchain_ollama import ChatOllama
+from langchain_core.prompts import PromptTemplate
 from typing import List
 from pydantic import SecretStr
 
@@ -12,13 +12,8 @@ class LangChainService:
     """Service for LangChain operations with Google Gemini integration"""
 
     def __init__(self):
-        self.openai_api_key = SecretStr(settings.OPENAI_API_KEY)
-        self.openai_model = settings.OPENAI_MODEL or "gpt-4o-mini"
-
-        if not self.openai_api_key:
-            raise ValueError(
-                "OpenAI API key (OPENAI_API_KEY) is not set in the settings."
-            )
+        self.ollama_base_url = settings.OLLAMA_BASE_URL
+        self.ollama_model = settings.OLLAMA_MODEL
 
         self._set_env_variables()
 
@@ -31,11 +26,11 @@ class LangChainService:
         os.environ["LANGSMITH_PROJECT"] = settings.LANGSMITH_PROJECT or ""
 
     @lru_cache(maxsize=1)
-    def get_openai_chat_model(self) -> ChatOpenAI:
-        """Returns a cached instance of the OpenAI chat model."""
-        return ChatOpenAI(
-            model=self.openai_model,
-            api_key=self.openai_api_key,
+    def get_ollama_chat_model(self) -> ChatOllama:
+        """Returns a cached instance of the Ollama chat model."""
+        return ChatOllama(
+            model=self.ollama_model,
+            base_url=self.ollama_base_url,
             temperature=0.2,
         )
 
