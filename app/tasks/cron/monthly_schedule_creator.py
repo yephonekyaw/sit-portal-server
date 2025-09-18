@@ -1,8 +1,7 @@
 import uuid
 import asyncio
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from dateutil.relativedelta import relativedelta
-from zoneinfo import ZoneInfo
 from typing import List, Dict, Set, Tuple
 
 
@@ -19,9 +18,6 @@ from app.db.models import (
 from app.services.staff.dashboard_stats_service import get_dashboard_stats_service
 from app.utils.logging import get_logger
 from app.utils.datetime_utils import *
-
-# Bangkok timezone for business logic calculations
-# BANGKOK_TZ = ZoneInfo("Asia/Bangkok")
 
 
 @celery.task(bind=True, max_retries=3, default_retry_delay=60)
@@ -53,7 +49,7 @@ async def _async_monthly_schedule_creator(request_id: str):
 
     for db_session in get_sync_session():
         try:
-            current_datetime = utc_now()
+            current_datetime = naive_utc_now()
             current_academic_year = _calculate_current_academic_year(current_datetime)
 
             logger.info(
@@ -131,7 +127,10 @@ async def _async_monthly_schedule_creator(request_id: str):
                         schedule_creation_date.date() - current_datetime.date()
                     ).days
 
-                    if not (0 <= days_until_creation <= 30):
+                    if not (
+                        0 <= days_until_creation <= 30
+                        or schedule_creation_date <= current_datetime
+                    ):
                         skipped_count += 1
                         continue
 
@@ -175,63 +174,59 @@ async def _async_monthly_schedule_creator(request_id: str):
 
             # Create all schedules in batch
             if schedules_to_create:
-                created_schedules = []
-                for schedule_data in schedules_to_create:
-                    schedule = ProgramRequirementSchedule(**schedule_data)
-                    created_schedules.append(schedule)
-
+                # Create ProgramRequirementSchedule objects
+                created_schedules = [
+                    ProgramRequirementSchedule(**data) for data in schedules_to_create
+                ]
                 db_session.add_all(created_schedules)
                 db_session.commit()
                 created_count = len(created_schedules)
 
-                # Create dashboard stats for each new schedule
-                dashboard_service = get_dashboard_stats_service(db_session)
-                for schedule_data in schedules_to_create:
-                    # Find the corresponding requirement for additional data
-                    requirement = next(
-                        req
-                        for req in program_requirements
-                        if req.id == schedule_data["program_requirement_id"]
-                    )
-
-                    # Get academic year for the student cohort
-                    academic_year_result = db_session.get(
-                        AcademicYear, schedule_data["academic_year_id"]
-                    )
-
-                    if academic_year_result:
-                        await dashboard_service.create_dashboard_stats_by_schedule_id(
-                            schedule_data["id"],
+                # Lookup dictionaries
+                requirement_lookup = {req.id: req for req in program_requirements}
+                academic_year_ids = {
+                    data["academic_year_id"] for data in schedules_to_create
+                }
+                academic_years = (
+                    db_session.execute(
+                        select(AcademicYear).where(
+                            AcademicYear.id.in_(academic_year_ids)
                         )
+                    )
+                    .scalars()
+                    .all()
+                )
+                academic_year_lookup = {ay.id: ay for ay in academic_years}
 
-                # Update last_recurrence_at for processed requirements
-                # Create a mapping of requirement_id to the schedule data for timestamp calculation
+                dashboard_service = get_dashboard_stats_service(db_session)
+
                 processed_requirements_data = {}
+
                 for schedule_data in schedules_to_create:
                     req_id = schedule_data["program_requirement_id"]
-                    # Find the requirement object and calculate student cohort year
-                    requirement = next(
-                        req for req in program_requirements if req.id == req_id
+                    requirement = requirement_lookup.get(req_id)
+                    academic_year = academic_year_lookup.get(
+                        schedule_data["academic_year_id"]
                     )
 
-                    # Calculate student cohort year from the academic_year_id we used
-                    academic_year_result = db_session.get(
-                        AcademicYear, schedule_data["academic_year_id"]
-                    )
-
-                    if academic_year_result is None:
+                    if not academic_year:
                         logger.error(
                             f"Academic year not found for schedule {schedule_data['academic_year_id']} requirement {req_id}"
                         )
                         continue
 
-                    student_cohort_year = academic_year_result.year_code
-
-                    processed_requirements_data[req_id] = (
-                        requirement,
-                        student_cohort_year,
+                    # Dashboard stats
+                    await dashboard_service.create_dashboard_stats_by_schedule_id(
+                        schedule_data["id"]
                     )
 
+                    # Last recurrence
+                    processed_requirements_data[req_id] = (
+                        requirement,
+                        academic_year.year_code,
+                    )
+
+                # Update last_recurrence_at for all processed requirements
                 await _update_last_recurrence_timestamps(
                     db_session, processed_requirements_data
                 )

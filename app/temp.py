@@ -154,7 +154,14 @@
 #     return False
 
 
+async def default():
+    from app.tasks import monthly_schedule_creator_task
+
+    monthly_schedule_creator_task.delay(request_id="manual-invocation")
+
+
 import asyncio
 
 if __name__ == "__main__":
+    asyncio.run(default())
     pass

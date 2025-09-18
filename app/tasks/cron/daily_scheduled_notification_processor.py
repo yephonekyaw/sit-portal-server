@@ -32,31 +32,35 @@ async def _async_daily_scheduled_notifications_processor(request_id: str):
             # Get current date in UTC
             current_date = utc_now().date()
 
-            # Query notifications scheduled for today that have pending recipients
-            result = db_session.execute(
-                select(Notification)
-                .options(selectinload(Notification.recipients))
-                .join(NotificationRecipient)
+            start_of_day = to_utc(datetime.combine(current_date, datetime.min.time()))
+            end_of_day = to_utc(datetime.combine(current_date, datetime.max.time()))
+
+            pending_recipients = (
+                select(NotificationRecipient.id)
                 .where(
                     and_(
-                        # Scheduled for today
-                        Notification.scheduled_for
-                        >= to_utc(datetime.combine(current_date, datetime.min.time())),
-                        Notification.scheduled_for
-                        < to_utc(datetime.combine(current_date, datetime.max.time())),
-                        # Has pending recipients
+                        NotificationRecipient.notification_id == Notification.id,
                         NotificationRecipient.status == NotificationStatus.PENDING,
-                        # Not expired
-                        (
-                            (Notification.expires_at == None)
-                            | (Notification.expires_at > utc_now())
-                        ),
                     )
                 )
-                .distinct()
+                .exists()
             )
 
-            scheduled_notifications = result.scalars().all()
+            stmt = (
+                select(Notification)
+                .options(selectinload(Notification.recipients))
+                .where(
+                    and_(
+                        Notification.scheduled_for >= start_of_day,
+                        Notification.scheduled_for < end_of_day,
+                        (Notification.expires_at.is_(None))
+                        | (Notification.expires_at > utc_now()),
+                        pending_recipients,
+                    )
+                )
+            )
+
+            scheduled_notifications = db_session.scalars(stmt).all()
 
             if not scheduled_notifications:
                 return {

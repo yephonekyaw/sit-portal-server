@@ -4,7 +4,6 @@ import asyncio
 
 from sqlalchemy.orm import Session
 from sqlalchemy import select, and_, update
-from sqlalchemy.orm import selectinload
 
 from app.celery import celery
 from app.db.session import get_sync_session
@@ -170,15 +169,6 @@ async def _get_eligible_requirement_schedules(
     """
     result = db_session.execute(
         select(ProgramRequirementSchedule)
-        .options(
-            selectinload(ProgramRequirementSchedule.program_requirement).selectinload(
-                ProgramRequirementSchedule.program_requirement.program
-            ),
-            selectinload(ProgramRequirementSchedule.program_requirement).selectinload(
-                ProgramRequirementSchedule.program_requirement.certificate_type
-            ),
-            selectinload(ProgramRequirementSchedule.academic_year),
-        )
         .where(
             and_(
                 # Notification period has started

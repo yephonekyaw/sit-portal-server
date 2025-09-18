@@ -59,6 +59,7 @@ async def _async_line_token_manager(request_id: str):
             # Revoke expired tokens
             try:
                 valid_kids = await line_channel_token_service.get_valid_token_kids()
+                logger.info(f"Valid KIDs: {valid_kids}")
                 expired_tokens = (
                     await line_channel_token_service.get_expired_tokens_by_kids(
                         valid_kids
