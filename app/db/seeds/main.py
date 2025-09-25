@@ -55,7 +55,7 @@ def seed_all_data():
         # seed_program_requirement_schedules(db_session)
         seed_notification_channel_templates(db_session)
         seed_permissions(db_session)
-        seed_users_students(db_session)
+        # seed_users_students(db_session)
         seed_users_staff(db_session)
 
         # Phase 3: Junction/relationship tables

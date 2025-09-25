@@ -12,5 +12,6 @@ __all__ = [
     "daily_notification_expiration_task",
     "monthly_schedule_creator_task",
     "annual_requirement_archiver_task",
+    "annual_batch_processor_task",
     "line_token_manager_task",
 ]

@@ -73,6 +73,12 @@ beat_schedule = {
         ),
         "args": ("annual_requirement_archiver_cron",),
     },
+    # Annual batch processing - Midnight on every Wednesday in August and February Bangkok time
+    "annual-batch-processor": {
+        "task": "app.tasks.cron.annual_batch_processor.annual_batch_processor_task",
+        "schedule": crontab(hour=0, minute=0, day_of_week=3, month_of_year="2,8"),
+        "args": ("annual_batch_processor_cron",),
+    },
     # LINE API management - Every 15 days at 3:00 AM Bangkok time
     "line-token-manager": {
         "task": "app.tasks.cron.line_token_manager.line_token_manager_task",

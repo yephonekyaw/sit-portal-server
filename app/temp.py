@@ -155,9 +155,19 @@
 
 
 async def default():
-    from app.tasks import monthly_schedule_creator_task
+    from datetime import datetime
 
-    monthly_schedule_creator_task.delay(request_id="manual-invocation")
+    from app.tasks import annual_batch_processor_task
+
+    annual_batch_processor_task.delay(
+        request_id="manual-invocation", current_datetime=datetime(2023, 8, 1, 0, 0, 0)
+    )
+    annual_batch_processor_task.delay(
+        request_id="manual-invocation", current_datetime=datetime(2024, 8, 1, 0, 0, 0)
+    )
+    annual_batch_processor_task.delay(
+        request_id="manual-invocation", current_datetime=datetime(2025, 8, 1, 0, 0, 0)
+    )
 
 
 import asyncio
