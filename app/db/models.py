@@ -304,7 +304,7 @@ class Program(Base, AuditMixin):
         server_default=func.newid(),
     )
     program_code: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    program_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    program_name: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     duration_years: Mapped[int] = mapped_column(Integer, default=4, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
