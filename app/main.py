@@ -10,7 +10,8 @@ from app.middlewares import (
     RequestIDMiddleware,
     DevSecurityMiddleware,
     ProdSecurityMiddleware,
-    AuthMiddleware,
+    # AuthMiddleware,
+    DependentAuthMiddleware,
 )
 
 # Initialize the logger
@@ -48,7 +49,7 @@ def create_application() -> FastAPI:
         if settings.ENVIRONMENT == "development"
         else ProdSecurityMiddleware
     )
-    application.add_middleware(AuthMiddleware)
+    application.add_middleware(DependentAuthMiddleware)
     application.add_middleware(RequestIDMiddleware)
 
     # Routers

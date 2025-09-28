@@ -155,19 +155,28 @@
 
 
 async def default():
-    from datetime import datetime
+    # from datetime import datetime
 
-    from app.tasks import annual_batch_processor_task
+    # from app.tasks import annual_batch_processor_task
 
-    annual_batch_processor_task.delay(
-        request_id="manual-invocation", current_datetime=datetime(2023, 8, 1, 0, 0, 0)
-    )
-    annual_batch_processor_task.delay(
-        request_id="manual-invocation", current_datetime=datetime(2024, 8, 1, 0, 0, 0)
-    )
-    annual_batch_processor_task.delay(
-        request_id="manual-invocation", current_datetime=datetime(2025, 8, 1, 0, 0, 0)
-    )
+    # annual_batch_processor_task.delay(
+    #     request_id="manual-invocation", current_datetime=datetime(2023, 8, 1, 0, 0, 0)
+    # )
+    # annual_batch_processor_task.delay(
+    #     request_id="manual-invocation", current_datetime=datetime(2024, 8, 1, 0, 0, 0)
+    # )
+    # annual_batch_processor_task.delay(
+    #     request_id="manual-invocation", current_datetime=datetime(2025, 8, 1, 0, 0, 0)
+    # )
+
+    from httpx import AsyncClient
+
+    async with AsyncClient() as client:
+        response = await client.get(
+            "https://sitbrain.sit.kmutt.ac.th/api/v1/users/profile/studentsFromYear?academicYear=2566"
+        )
+
+        print(response.json())
 
 
 import asyncio

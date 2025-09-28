@@ -1,6 +1,5 @@
 from typing import Optional, Callable
 from fastapi import Request, Response
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import cast
 
@@ -88,7 +87,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
                 )
                 return response
 
-        except Exception as e:
+        except Exception:
             response = ResponseBuilder.error(
                 request=request,
                 message="Authentication failed",
@@ -205,32 +204,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
             return
 
         CookieUtils.set_auth_cookies(response, new_tokens)
-
-
-class JWTBearer(HTTPBearer):
-    """Custom JWT Bearer authentication for dependency injection"""
-
-    def __init__(self, auto_error: bool = True):
-        super().__init__(auto_error=auto_error)
-
-    async def __call__(self, request: Request) -> HTTPAuthorizationCredentials:
-        """Validate JWT token from request"""
-        credentials = await super().__call__(request)
-
-        if not credentials:
-            raise AuthenticationError(
-                "Invalid authorization credentials", "INVALID_CREDENTIALS"
-            )
-
-        if not credentials.scheme == "Bearer":
-            raise AuthenticationError("Invalid authentication scheme", "INVALID_SCHEME")
-
-        # Verify token
-        payload = AuthUtils.verify_access_token(credentials.credentials)
-        if not payload:
-            raise AuthenticationError("Invalid or expired token", "INVALID_TOKEN")
-
-        return credentials
 
 
 # Dependency for getting current user from request state

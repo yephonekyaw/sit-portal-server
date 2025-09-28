@@ -69,6 +69,9 @@ class Settings(BaseSettings):
     LDAP_STAFF_BASE_DN: str = "<your-ldap-staff-base-dn>"
     LDAP_STUDENT_BASE_DN: str = "<your-ldap-student-base-dn>"
 
+    # SIT brain base url
+    SITBRAIN_BASE_URL: str = "<your-sitbrain-base-url>"
+
     @field_validator("ALLOWED_HOSTS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
         if not v:

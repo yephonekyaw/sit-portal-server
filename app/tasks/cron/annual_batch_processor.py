@@ -4,6 +4,7 @@ from datetime import datetime
 from sqlalchemy import select
 
 from app.celery import celery
+from app.config.settings import settings
 from app.db.session import get_sync_session
 from app.utils.logging import get_logger
 from app.utils.datetime_utils import from_bangkok_to_naive_utc, utc_now
@@ -44,7 +45,7 @@ async def _async_annual_batch_processor(request_id: str, **kwargs):
                 academic_year=current_academic_year,
             )
 
-            # 1. Get or Create Academic Year
+            # Get or Create Academic Year
             academic_year_result = db_session.execute(
                 select(AcademicYear).where(
                     AcademicYear.year_code == current_academic_year
@@ -84,13 +85,13 @@ async def _async_annual_batch_processor(request_id: str, **kwargs):
 
             academic_year_id = academic_year.id
 
-            # 2. Create program lookup table
+            # Create program lookup table
             programs_result = db_session.execute(
                 select(Program.id, Program.program_name)
             )
             program_lookup = {name: str(id) for id, name in programs_result}
 
-            # 3. Create student lookup set
+            # Create student lookup set
             students_result = db_session.execute(
                 select(Student.student_id).where(
                     Student.academic_year_id == academic_year_id
@@ -98,10 +99,10 @@ async def _async_annual_batch_processor(request_id: str, **kwargs):
             )
             existing_student_ids = {row[0] for row in students_result}
 
-            # 4. Fetch data from external API
-            api_url = f"https://sitbrain.sit.kmutt.ac.th/api/v1/users/profile/studentsFromYear?academicYear={current_thai_academic_year}"
+            # Fetch data from external API
+            api_url = f"{settings.SITBRAIN_BASE_URL}/users/profile/studentsFromYear?academicYear={current_thai_academic_year}"
 
-            async with httpx.AsyncClient(verify=False) as client:
+            async with httpx.AsyncClient() as client:
                 try:
                     response = await client.get(api_url, timeout=30.0)
                     response.raise_for_status()
@@ -118,7 +119,7 @@ async def _async_annual_batch_processor(request_id: str, **kwargs):
                         "request_id": request_id,
                     }
 
-            # 5. Filter out existing students and process new ones
+            # Filter out existing students and process new ones
             new_student_data = [
                 s
                 for s in api_students
