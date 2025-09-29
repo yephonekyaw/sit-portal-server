@@ -127,10 +127,7 @@ async def _async_monthly_schedule_creator(request_id: str):
                         schedule_creation_date.date() - current_datetime.date()
                     ).days
 
-                    if not (
-                        0 <= days_until_creation <= 30
-                        or schedule_creation_date <= current_datetime
-                    ):
+                    if not (0 <= days_until_creation <= 30):
                         skipped_count += 1
                         continue
 

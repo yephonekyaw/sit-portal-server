@@ -3,7 +3,7 @@ from typing import Any, List, Dict
 import asyncio
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select, and_, update
+from sqlalchemy import select, and_, update, func
 
 from app.celery import celery
 from app.db.session import get_sync_session
@@ -174,7 +174,7 @@ async def _get_eligible_requirement_schedules(
                 # Notification period has started
                 ProgramRequirementSchedule.start_notify_at <= current_datetime,
                 # Still within notification window (7 days after grace period)
-                ProgramRequirementSchedule.grace_period_deadline + timedelta(days=7)
+                func.DATEADD("day", 7, ProgramRequirementSchedule.grace_period_deadline)
                 >= current_datetime,
             )
         )

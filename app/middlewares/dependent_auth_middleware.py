@@ -92,7 +92,7 @@ class DependentAuthMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             return ResponseBuilder.error(
                 request=request,
-                message="An unexpected internal error occurred.",
+                message=str(e),
                 error_code="INTERNAL_SERVER_ERROR",
                 status_code=500,
             )
