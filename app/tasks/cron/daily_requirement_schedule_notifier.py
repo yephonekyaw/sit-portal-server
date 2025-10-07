@@ -174,8 +174,8 @@ async def _get_eligible_requirement_schedules(
                 # Notification period has started
                 ProgramRequirementSchedule.start_notify_at <= current_datetime,
                 # Still within notification window (7 days after grace period)
-                func.DATEADD("day", 7, ProgramRequirementSchedule.grace_period_deadline)
-                >= current_datetime,
+                ProgramRequirementSchedule.grace_period_deadline
+                >= current_datetime - timedelta(days=7),
             )
         )
         .order_by(ProgramRequirementSchedule.submission_deadline)
