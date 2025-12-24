@@ -44,11 +44,12 @@ def create_application() -> FastAPI:
     )
 
     # Add custom middlewares
-    application.add_middleware(
-        DevSecurityMiddleware
-        if settings.ENVIRONMENT == "development"
-        else ProdSecurityMiddleware
-    )
+    # application.add_middleware(
+    #     DevSecurityMiddleware
+    #     if settings.ENVIRONMENT == "development"
+    #     else ProdSecurityMiddleware
+    # )
+    application.add_middleware(DevSecurityMiddleware)
     application.add_middleware(DependentAuthMiddleware)
     application.add_middleware(RequestIDMiddleware)
 
