@@ -52,10 +52,10 @@ def seed_all_data():
         # Phase 2: Tables with single dependencies
         logger.info("Phase 2: Seeding dependent tables...")
         seed_program_requirements(db_session)
-        # seed_program_requirement_schedules(db_session)
+        seed_program_requirement_schedules(db_session)
         seed_notification_channel_templates(db_session)
         seed_permissions(db_session)
-        # seed_users_students(db_session)
+        seed_users_students(db_session)
         seed_users_staff(db_session)
 
         # Phase 3: Junction/relationship tables
@@ -64,7 +64,7 @@ def seed_all_data():
 
         # Phase 4: Tables that depend on multiple others
         logger.info("Phase 4: Seeding complex dependent tables...")
-        # seed_dashboard_stats(db_session)
+        seed_dashboard_stats(db_session)
 
         logger.info("Database seeding completed successfully!")
         return True
